@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "aicon-ai-studio"
 include(":app")
+include(":core:engine")
