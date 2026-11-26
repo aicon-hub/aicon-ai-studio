@@ -1,3 +1,5 @@
+<p align="center"><img src="mark-aperture.svg" width="140" alt="AiCoN AI Studio logo"></p>
+
 # AiCoN AI Studio
 
 On-device AI studio for Android. Download AI models to your phone, chat fully offline, and run agent workflows that read and write your files. Free and open source, from AiCoN.
