@@ -1,0 +1,12 @@
+# Only versions verified against official sources go here.
+# AGP 9.5.1 + Gradle 9.6.0 + NDK 28.2.13676358 + JDK 17: developer.android.com/build/releases/gradle-plugin (checked 2026-11-27)
+# Kotlin 2.5.20: kotlinlang.org/docs/releases.html (checked 2026-11-27)
+[versions]
+agp = "9.5.1"
+kotlin = "2.5.20"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+
+[libraries]
