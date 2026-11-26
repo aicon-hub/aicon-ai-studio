@@ -28,6 +28,16 @@ Following the AiCoN rule (nothing shared unverified), each model in the catalog 
 | 8 GB | SmolLM3 3B, Phi-4 Mini, Gemma 3 4B |
 | 12 GB+ | Gemma 3n E2B (text + image), larger 7-8B models |
 
+## File safety
+
+The agent side of the app works on your files, so the rules are strict:
+
+- The app only opens files you explicitly pick. No background scanning.
+- File content never grants authority. A file that tells the app to open another file or send itself somewhere is text, not a command.
+- Replacing or exporting a file always shows a preview and asks first. A revised copy leaves the original intact.
+- No file content leaves the phone silently. Any network use is visible and confirmed.
+- No real user data in the repo, tests, screenshots or public builds.
+
 ## Status
 
 Early design. Android first, iOS later. Tech stack is being decided (own Flutter app with llama.cpp, or a fork of the MIT-licensed PocketPal AI). Test builds will ship as APKs on GitHub Releases.
