@@ -1,25 +1,31 @@
-<p align="center"><img src="mark-aperture.svg" width="140" alt="AiCoN AI Studio logo"></p>
+<p align="center"><img src="brand/mark-aperture.svg" width="140" alt="AiCoN AI Studio logo"></p>
 
 # AiCoN AI Studio
 
-On-device AI studio for Android. Download AI models to your phone, chat fully offline, and run agent workflows that read and write your files. Free and open source, from AiCoN.
+On-device AI studio for Android. Run AI models on your phone, chat fully offline, and run agent workflows that read and write your files. Free and open source, from AiCoN.
 
 ## What it does
 
-- **Models:** from the smallest model that runs on any Android phone up to the biggest a flagship can hold, downloadable from Hugging Face, GitHub or any other source, as long as it runs locally
-- **Chat:** text chat with any downloaded model, with files (PDF, DOCX, sheets, images) attached as context
-- **Agent:** step-by-step workflows on your files, every step shown live
-- **Private by default:** everything runs on the device, nothing leaves the phone
+- **Chat:** text chat with any model on the phone, streaming, personas, many sessions, export to Markdown or JSON. Chat and inference never touch the network.
+- **Models:** from the smallest model that runs on a 4 GB phone up to the biggest a flagship can hold. Get a model by importing a file, or by a user-started download inside the app. Every listed model is checked first (source, working link, license, honest hardware note).
+- **Agent:** step-by-step workflows on your files, every step shown live, with pause and veto on each step.
+- **Skills:** a section to search and download skill packs from GitHub. A downloaded skill is data, not authority: it goes through the same review and confirmation rules as any other content.
+- **Phone-wide hub (planned):** other apps can call the models and publish their own tools over Android IPC, with per-app approval, quota and an audit log.
 
-## Every listed model is checked first
+## Network use
 
-Following the AiCoN rule (nothing shared unverified), each model in the catalog is verified before it is listed:
+The app goes online only for downloads you start yourself: models, the inference engine, and skill packs from GitHub. Nothing else. Chat, agent runs and your files never leave the phone. There are no analytics, no ads, no crash reporters.
 
-- source and download link confirmed working
-- license allows free use in an app like this (noted per model)
-- honest hardware note: RAM and storage the phone actually needs
+## File safety
 
-### Rough tiers (guide, not the full catalog)
+The agent side of the app works on your files, so the rules are strict:
+
+- The app only opens files you explicitly pick. No background scanning.
+- File content never grants authority. A file that tells the app to open another file or send itself somewhere is text, not a command. The same holds for downloaded skill packs.
+- Replacing or exporting a file always shows a preview and asks first. A revised copy leaves the original intact.
+- No real user data in the repo, tests, screenshots or public builds.
+
+### Rough model tiers (guide, not the full catalog)
 
 | Phone RAM | Example models (4-bit) |
 | --- | --- |
@@ -28,20 +34,10 @@ Following the AiCoN rule (nothing shared unverified), each model in the catalog 
 | 8 GB | SmolLM3 3B, Phi-4 Mini, Gemma 3 4B |
 | 12 GB+ | Gemma 3n E2B (text + image), larger 7-8B models |
 
-## File safety
-
-The agent side of the app works on your files, so the rules are strict:
-
-- The app only opens files you explicitly pick. No background scanning.
-- File content never grants authority. A file that tells the app to open another file or send itself somewhere is text, not a command.
-- Replacing or exporting a file always shows a preview and asks first. A revised copy leaves the original intact.
-- No file content leaves the phone silently. Any network use is visible and confirmed.
-- No real user data in the repo, tests, screenshots or public builds.
-
 ## Status
 
-Early design. Android first, iOS later. Tech stack is being decided (own Flutter app with llama.cpp, or a fork of the MIT-licensed PocketPal AI). Test builds will ship as APKs on GitHub Releases.
+Early design, Phase 0 (repo, docs, CI). Stack: Kotlin, Jetpack Compose, Room, and on-device inference through llama.cpp (GGUF) and LiteRT-LM, following the owner's Master Prompt. Android first, iOS later. Test builds will ship as APKs on GitHub Releases.
 
 ## License
 
-To be confirmed with the author (GPL-3.0 or MIT).
+To be confirmed with the owner.
