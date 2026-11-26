@@ -40,4 +40,4 @@ Early design, Phase 0 (repo, docs, CI). Stack: Kotlin, Jetpack Compose, Room, an
 
 ## License
 
-To be confirmed with the owner.
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). The AiCoN name and logo stay with AiCoN and are not part of the license grant.
