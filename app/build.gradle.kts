@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "dev.aicon.studio"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
