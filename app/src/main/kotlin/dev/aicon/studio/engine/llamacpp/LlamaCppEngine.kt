@@ -41,7 +41,7 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
             throw EngineException("Model file is empty: $modelPath")
         }
         if (!loaded) {
-            nativeInit(appContext.applicationInfo.nativeLibDir)
+            nativeInit(appContext.applicationInfo.nativeLibraryDir)
         }
         if (nativeLoadModel(modelPath) != 0) {
             throw EngineException("llama.cpp could not load this file. Is it a GGUF model?")
