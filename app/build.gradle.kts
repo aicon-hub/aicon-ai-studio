@@ -27,6 +27,17 @@ android {
         compose = true
     }
 
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
+
+    ndk {
+        // Phones run arm64; x86_64 covers emulators.
+        abiFilters += listOf("arm64-v8a", "x86_64")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
