@@ -1,12 +1,13 @@
 package dev.aicon.studio.ui.chat
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.aicon.studio.engine.ChatTurn
 import dev.aicon.studio.engine.EngineException
 import dev.aicon.studio.engine.InferenceEngine
 import dev.aicon.studio.engine.Role
-import dev.aicon.studio.engine.StubEngine
+import dev.aicon.studio.engine.llamacpp.LlamaCppEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,8 +19,9 @@ import kotlinx.coroutines.launch
  * yet (sessions land with Room in a later phase).
  */
 class ChatViewModel(
-    private val engine: InferenceEngine = StubEngine(),
-) : ViewModel() {
+    app: Application,
+    private val engine: InferenceEngine = LlamaCppEngine(app.applicationContext),
+) : AndroidViewModel(app) {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
