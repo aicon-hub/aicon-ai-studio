@@ -14,6 +14,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        ndk {
+            // Phones run arm64; x86_64 covers emulators.
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -32,12 +37,6 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
-
-    ndk {
-        // Phones run arm64; x86_64 covers emulators.
-        abiFilters += listOf("arm64-v8a", "x86_64")
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -56,6 +55,5 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
 }
