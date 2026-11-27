@@ -8,14 +8,14 @@ Other apps can call the models over Binder/AIDL. A caller may be hostile.
 
 - Every caller is identified by UID and signing certificate. The user approves each app once, by name.
 - Per-app quota and model allowlist. One approved app cannot block others or the user.
-- Every call lands in the audit log with caller, time and arguments.
+- Every call lands in the audit log with caller, time, tool name, result status and a hash of any file path. Full arguments are not logged by default, because they can hold private file text or paths.
 
 ## 2. A malicious model file
 
 Models come from user imports and in-app downloads. A model file is parsed by native code, which is where parser bugs live.
 
 - SHA-256 on import, optional expected-hash check, unknown formats rejected.
-- Native parsing and inference run in a separate `:inference` process with no access to app storage, contacts or other app data.
+- Goal: native parsing and inference run in a separate `:inference` process. A named Android process shares the app's UID and can open app-private files, so this is NOT claimed as isolation until the acceptance test below passes. Today inference runs in the main process and this is not yet built.
 - A model is data. Weights never become code.
 
 ## 3. Prompt injection
@@ -47,3 +47,8 @@ Other apps can publish tools, and the Skills section downloads packs from GitHub
 ## Network
 
 The app holds the INTERNET permission for one job: downloads the user starts (models, engine, skill packs from GitHub). Chat, agent runs, files and logs never use the network. There are no analytics, ads or crash reporters. A CI check flags any new exported component or permission use so this stays true as the app grows.
+
+## Acceptance criteria
+
+1. Inference isolation is not claimed until verified at manifest and runtime level. Required: a synthetic test where the inference component tries to open an app-private file the user did not select, and fails. Until it passes, docs and UI say nothing about an isolated process.
+2. Audit logs hold tool name, result status and a path hash. They never hold full tool arguments by default. Required: a unit test that runs a tool call with a synthetic file path and text, then checks the log entry contains neither.
