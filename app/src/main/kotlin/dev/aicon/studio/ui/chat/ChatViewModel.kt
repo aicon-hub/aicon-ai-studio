@@ -18,10 +18,11 @@ import kotlinx.coroutines.launch
  * Holds the conversation and drives the engine. UI state only; no storage
  * yet (sessions land with Room in a later phase).
  */
-class ChatViewModel(
-    app: Application,
-    private val engine: InferenceEngine = LlamaCppEngine(app.applicationContext),
-) : AndroidViewModel(app) {
+class ChatViewModel(app: Application) : AndroidViewModel(app) {
+
+    // Built inside the class: a default constructor argument hides the
+    // single-Application constructor that AndroidViewModelFactory looks up.
+    private val engine: InferenceEngine = LlamaCppEngine(app.applicationContext)
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
