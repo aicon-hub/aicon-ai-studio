@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-28
+
+### Added
+- Vision in chat: with a SmolVLM2 model loaded (2.2B Q4_K_M or 500M Q8_0, each with its SHA-256-verified mmproj adapter), a Photo button attaches one image to a message. Image input runs through llama.cpp's mtmd library (v1.1.0).
+- Catalog tabs on the Models screen: Chat, Vision, Translation, Speech to text, Text to speech, Image, Embeddings, Video. Every entry shows its state (Ready, Needs runtime work, Not yet), size, RAM need and license; only Ready entries offer a download.
+- Translation: Hy-MT3 1.8B (Q4_K_M, Apache-2.0, 102 languages, Malayalam included) is ready to download; it runs on the same on-device engine as chat.
+- AiCoN branding: official orange mark as the launcher icon, the AiCoN lockup in the chat header and the drawer, brand orange as the default accent, and Inter as the app typeface (SIL OFL 1.1, pinned v4.1, fetched and hash-checked at build time).
+- Catalog integrity tests: ready entries must carry an https download and a 64-hex SHA-256; vision entries a verified mmproj; not-ready entries never offer a download.
+
+### Changed
+- Models screen groups the catalog by category instead of one flat list.
+
 ## [0.1.3] - 2026-11-28
 
 ### Added
