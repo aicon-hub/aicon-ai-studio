@@ -7,6 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -35,9 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import dev.aicon.studio.ui.theme.BrandIris
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -127,18 +133,28 @@ private fun DrawerContent(
 ) {
     val sessions by chatVm.sessions.collectAsStateWithLifecycle()
     val current by chatVm.currentSession.collectAsStateWithLifecycle()
-    val darkDrawer = MaterialTheme.colorScheme.background.luminance() < 0.5f
-
-    // Official AiCoN lockup; the wordmark lettering is artwork, not a font.
-    Image(
-        painter = painterResource(
-            if (darkDrawer) R.drawable.ic_aicon_lockup_light else R.drawable.ic_aicon_lockup_dark,
-        ),
-        contentDescription = "AiCoN",
+    // The picked AiCoN AI Studio identity: iris mark plus wordmark.
+    // The "AI" span stays brand iris whatever accent the user picks.
+    Row(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .height(28.dp),
-    )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_aicon_mark),
+            contentDescription = null,
+            modifier = Modifier.height(28.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("AiCoN ") }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = BrandIris)) { append("AI") }
+                append(" Studio")
+            },
+            style = MaterialTheme.typography.titleLarge,
+        )
+    }
     HorizontalDivider()
     Row(
         modifier = Modifier
