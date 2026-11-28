@@ -81,8 +81,8 @@ android {
         applicationId = "dev.aicon.studio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.3.1"
+        versionCode = 10
+        versionName = "0.3.2"
 
         ndk {
             // Phones run arm64; x86_64 covers emulators.
