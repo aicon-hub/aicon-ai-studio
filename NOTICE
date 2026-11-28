@@ -6,3 +6,11 @@ This product includes software developed by AiCoN
 
 The AiCoN name and logo are trademarks of AiCoN and are not covered by
 the Apache-2.0 license grant for the code.
+
+This product bundles the Inter typeface (https://github.com/rsms/inter),
+licensed under the SIL Open Font License 1.1. The font files are fetched
+from the pinned v4.1 release at build time and verified by SHA-256.
+
+The model catalog links third-party models under their own licenses
+(Apache-2.0 for Tencent WePM and SmolVLM2); those models are downloaded by
+the user at runtime and are not part of this distribution.
