@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -23,10 +24,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -193,6 +198,33 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Text("Engine: llama.cpp v1.1.0, fully on-device", style = MaterialTheme.typography.bodySmall)
                 Text("Open source under Apache-2.0", style = MaterialTheme.typography.bodySmall)
                 Text("github.com/aicon-hub/aicon-ai-studio", style = MaterialTheme.typography.bodySmall)
+                var showLicenses by remember { mutableStateOf(false) }
+                TextButton(onClick = { showLicenses = true }) {
+                    Text("Third-party licenses")
+                }
+                if (showLicenses) {
+                    AlertDialog(
+                        onDismissRequest = { showLicenses = false },
+                        confirmButton = {
+                            TextButton(onClick = { showLicenses = false }) { Text("Close") }
+                        },
+                        title = { Text("Third-party licenses") },
+                        text = {
+                            Text(
+                                "AiCoN AI Studio is open source under the Apache License 2.0. " +
+                                    "It builds on:\n\n" +
+                                    "- llama.cpp (MIT): the on-device inference engine.\n" +
+                                    "- Jetpack Compose and AndroidX (Apache-2.0): the app toolkit.\n" +
+                                    "- Kotlin (Apache-2.0): the language and standard library.\n" +
+                                    "- Inter (SIL Open Font License 1.1): the app typeface.\n\n" +
+                                    "AI models you download carry their own licenses, shown on each " +
+                                    "model card (for example Llama Community License, Gemma Terms of " +
+                                    "Use, Qwen, Apache-2.0, MIT, and some non-commercial or " +
+                                    "research-only terms). Check a model's license before using it.",
+                            )
+                        },
+                    )
+                }
             }
         }
     }
