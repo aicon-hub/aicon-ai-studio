@@ -454,13 +454,9 @@ private fun ImpactStrip(context: android.content.Context) {
                     "${Savings.totalTokens} tokens generated on this phone. " +
                         (if (streak > 0) "$streak-day streak. " else "") +
                         "Level ${level.number} ${level.name}" +
-                        (level.nextAt?.let { " (next at $it tokens)" } ?: "") + ".
-
-" +
+                        (level.nextAt?.let { " (next at $it tokens)" } ?: "") + ".\n\n" +
                         "Estimated savings vs running the same tokens on a cloud model: " +
-                        "%.2f-%.1f Wh of electricity and %.0f-%.0f mL of water.
-
-".format(
+                        "%.2f-%.1f Wh of electricity and %.0f-%.0f mL of water.\n\n".format(
                             whLo, whHi, mlLo, mlHi,
                         ) +
                         "How we estimate: a 2025 Google measurement puts a median Gemini " +
