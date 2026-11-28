@@ -23,14 +23,23 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
     @Volatile
     private var loaded = false
 
+    /** Jinja template applied at load time for models without an embedded one. */
+    @Volatile
+    private var pendingTemplate: String? = null
+
     private external fun nativeInit(nativeLibDir: String)
     private external fun nativeLoadModel(modelPath: String): Int
+    private external fun nativeSetChatTemplate(template: String)
     private external fun nativePrepare(): Int
     private external fun nativeProcessSystemPrompt(prompt: String): Int
     private external fun nativeProcessUserPrompt(prompt: String, nPredict: Int): Int
     private external fun nativeGenerateNextToken(): String?
     private external fun nativeUnload()
     private external fun nativeShutdown()
+
+    override fun setChatTemplate(template: String?) {
+        pendingTemplate = template
+    }
 
     override suspend fun load(modelPath: String) {
         val f = File(modelPath)
@@ -46,6 +55,7 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
         if (nativeLoadModel(modelPath) != 0) {
             throw EngineException("llama.cpp could not load this file. Is it a GGUF model?")
         }
+        pendingTemplate?.let { nativeSetChatTemplate(it) }
         if (nativePrepare() != 0) {
             throw EngineException("The model loaded but the context could not start. It may be too big for this phone.")
         }
