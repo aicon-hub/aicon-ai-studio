@@ -54,7 +54,36 @@ interface InferenceEngine {
 
     /** Release the loaded model and native resources. */
     suspend fun unload()
+
+    /**
+     * Speed preferences applied at the next [load]. threads <= 0 means auto.
+     * Default: ignored by the backend.
+     */
+    fun setPerformance(threads: Int, contextSize: Int, kvCacheQ8: Boolean) {}
+
+    /** Measured speed of the current session; zeroes when nothing ran yet. */
+    fun stats(): EngineStats = EngineStats()
+
+    /**
+     * Indicative device benchmark (memory copy and FP throughput, core
+     * count). Null when the backend has no benchmark.
+     */
+    fun runBenchmark(): DeviceBenchmark? = null
 }
+
+/** Measured inference speed of the current session. */
+data class EngineStats(
+    val prefillTokPerSec: Double = 0.0,
+    val decodeTokPerSec: Double = 0.0,
+    val generatedTokens: Int = 0,
+)
+
+/** Indicative micro-benchmark result; not an inference measurement. */
+data class DeviceBenchmark(
+    val memoryCopyGBs: Double,
+    val fpGFLOPS: Double,
+    val cores: Int,
+)
 
 /** One message in the running conversation. */
 data class ChatTurn(val role: Role, val text: String)
