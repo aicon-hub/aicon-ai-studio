@@ -1,15 +1,18 @@
 package dev.aicon.studio.engine.llamacpp
 
+import android.app.ActivityManager
 import android.content.Context
 import dev.aicon.studio.engine.ChatTurn
+import dev.aicon.studio.engine.DeviceBenchmark
 import dev.aicon.studio.engine.EngineException
+import dev.aicon.studio.engine.EngineStats
 import dev.aicon.studio.engine.InferenceEngine
-import dev.aicon.studio.engine.Role
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.io.File
+import java.util.Locale
 
 /**
  * On-device GGUF inference through llama.cpp (v1.1.0, built from source in
@@ -32,11 +35,22 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
     @Volatile
     private var pendingMmproj: String? = null
 
+    /** Speed settings applied at load time; threads <= 0 means auto. */
+    @Volatile
+    private var pendingThreads = 0
+
+    @Volatile
+    private var pendingContextSize = 0
+
+    @Volatile
+    private var pendingKvQ8 = false
+
     private external fun nativeInit(nativeLibDir: String)
     private external fun nativeLoadModel(modelPath: String): Int
     private external fun nativeLoadMmproj(mmprojPath: String): Int
     private external fun nativeHasVision(): Boolean
     private external fun nativeSetChatTemplate(template: String)
+    private external fun nativeSetPerformance(threads: Int, contextSize: Int, kvQ8: Boolean)
     private external fun nativePrepare(): Int
     private external fun nativeProcessSystemPrompt(prompt: String): Int
     private external fun nativeProcessUserPrompt(prompt: String, nPredict: Int): Int
@@ -45,7 +59,9 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
         imagePath: String,
         nPredict: Int,
     ): Int
-    private external fun nativeGenerateNextToken(): String?
+    private external fun nativeGenerateTokens(maxPieces: Int): Array<String>
+    private external fun nativeGetPerfStats(): DoubleArray
+    private external fun nativeRunBenchmark(): DoubleArray
     private external fun nativeUnload()
     private external fun nativeShutdown()
 
@@ -55,6 +71,12 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
 
     override fun setMmproj(mmprojPath: String?) {
         pendingMmproj = mmprojPath
+    }
+
+    override fun setPerformance(threads: Int, contextSize: Int, kvCacheQ8: Boolean) {
+        pendingThreads = threads
+        pendingContextSize = contextSize
+        pendingKvQ8 = kvCacheQ8
     }
 
     override fun hasVision(): Boolean = loaded && nativeHasVision()
@@ -67,6 +89,7 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
         if (f.length() == 0L) {
             throw EngineException("Model file is empty: $modelPath")
         }
+        guardAvailableMemory(f.length())
         if (!loaded) {
             nativeInit(appContext.applicationInfo.nativeLibraryDir)
         }
@@ -74,6 +97,7 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
             throw EngineException("llama.cpp could not load this file. Is it a GGUF model?")
         }
         pendingTemplate?.let { nativeSetChatTemplate(it) }
+        nativeSetPerformance(pendingThreads, pendingContextSize, pendingKvQ8)
         if (nativePrepare() != 0) {
             throw EngineException("The model loaded but the context could not start. It may be too big for this phone.")
         }
@@ -90,7 +114,46 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
         loaded = true
     }
 
+    /**
+     * Refuse to start a model that clearly cannot fit in free memory: paging
+     * a mmap'd model in and out is far slower than any tuning can fix.
+     */
+    private fun guardAvailableMemory(modelBytes: Long) {
+        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
+        val info = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        if (info.availMem < modelBytes) {
+            throw EngineException(
+                "Not enough free memory: this phone has about " + gb(info.availMem) +
+                    " GB free and this model is " + gb(modelBytes) +
+                    " GB before the chat context. Try a smaller model.",
+            )
+        }
+    }
+
+    private fun gb(bytes: Long): String =
+        String.format(Locale.US, "%.1f", bytes / 1_000_000_000.0)
+
     override fun isLoaded(): Boolean = loaded
+
+    override fun stats(): EngineStats {
+        if (!loaded) return EngineStats()
+        val s = nativeGetPerfStats()
+        return EngineStats(
+            prefillTokPerSec = s[0],
+            decodeTokPerSec = s[1],
+            generatedTokens = s[2].toInt(),
+        )
+    }
+
+    override fun runBenchmark(): DeviceBenchmark {
+        val b = nativeRunBenchmark()
+        return DeviceBenchmark(
+            memoryCopyGBs = b[0],
+            fpGFLOPS = b[1],
+            cores = b[2].toInt(),
+        )
+    }
 
     override fun generate(prompt: String, history: List<ChatTurn>): Flow<String> =
         generate(prompt, history, null)
@@ -111,8 +174,11 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
             }
         }
         while (true) {
-            val piece = nativeGenerateNextToken() ?: break
-            if (piece.isNotEmpty()) emit(piece)
+            val pieces = nativeGenerateTokens(GENERATE_BATCH_PIECES)
+            if (pieces.isEmpty()) break
+            for (piece in pieces) {
+                if (piece.isNotEmpty()) emit(piece)
+            }
         }
     }.flowOn(Dispatchers.Default)
 
@@ -126,6 +192,7 @@ class LlamaCppEngine(private val appContext: Context) : InferenceEngine {
 
     companion object {
         private const val MAX_PREDICT_TOKENS = 512
+        private const val GENERATE_BATCH_PIECES = 8
         private const val DEFAULT_SYSTEM_PROMPT =
             "You are a helpful assistant running fully on the user's phone. Answer plainly."
 
