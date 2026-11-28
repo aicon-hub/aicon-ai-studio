@@ -28,6 +28,7 @@ static llama_context               * g_context;
 static common_batch                  g_batch;
 static common_chat_templates_ptr     g_chat_templates;
 static common_sampler              * g_sampler;
+static std::string                   g_chat_template_override;
 
 extern "C"
 JNIEXPORT void JNICALL
@@ -91,7 +92,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativePrepare(JNIEnv * /*en
     if (!context) { return 1; }
     g_context = context;
     g_batch = common_batch(context);
-    g_chat_templates = common_chat_templates_init(g_model, "");
+    g_chat_templates = common_chat_templates_init(g_model, g_chat_template_override);
     common_params_sampling sparams;
     sparams.temp = DEFAULT_SAMPLER_TEMP;
     g_sampler = common_sampler_init(g_model, sparams);
@@ -128,7 +129,7 @@ static std::string chat_add_and_format(const std::string &role, const std::strin
     new_msg.role = role;
     new_msg.content = content;
     auto formatted = common_chat_format_single(
-            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, /* use_jinja */ false);
+            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, /* use_jinja */ true);
     chat_msgs.push_back(new_msg);
     return formatted;
 }
@@ -175,12 +176,26 @@ static int decode_tokens_in_batches(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeSetChatTemplate(JNIEnv *env, jobject /*unused*/, jstring jtemplate) {
+    if (jtemplate == nullptr) {
+        g_chat_template_override.clear();
+        return;
+    }
+    const auto *t = env->GetStringUTFChars(jtemplate, nullptr);
+    g_chat_template_override.assign(t);
+    env->ReleaseStringUTFChars(jtemplate, t);
+    LOGi("%s: chat template override set (%zu bytes)", __func__, g_chat_template_override.size());
+}
+
+extern "C"
 JNIEXPORT jint JNICALL
 Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessSystemPrompt(
         JNIEnv *env,
         jobject /*unused*/,
         jstring jsystem_prompt
 ) {
+  try {
     reset_long_term_states();
     reset_short_term_states();
 
@@ -209,6 +224,10 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessSystemPrompt(
 
     system_prompt_position = current_position = (int) system_tokens.size();
     return 0;
+  } catch (const std::exception &e) {
+    LOGe("%s: %s", __func__, e.what());
+    return 3;
+  }
 }
 
 extern "C"
@@ -219,6 +238,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
         jstring juser_prompt,
         jint n_predict
 ) {
+  try {
     reset_short_term_states();
 
     const auto *const user_prompt = env->GetStringUTFChars(juser_prompt, nullptr);
@@ -248,6 +268,10 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
     current_position += user_prompt_size;
     stop_generation_position = current_position + user_prompt_size + n_predict;
     return 0;
+  } catch (const std::exception &e) {
+    LOGe("%s: %s", __func__, e.what());
+    return 3;
+  }
 }
 
 static bool is_valid_utf8(const char *string) {
@@ -337,6 +361,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeUnload(JNIEnv * /*unu
     g_batch = common_batch();
     llama_free(g_context);
     llama_model_free(g_model);
+    g_chat_template_override.clear();
 }
 
 extern "C"
