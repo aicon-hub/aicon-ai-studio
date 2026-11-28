@@ -76,6 +76,13 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { PhoneCheck.load(context) }
 
+
+    val categories = remember {
+        ModelCategory.entries.filter { ModelCatalog.byCategory(it).isNotEmpty() }
+    }
+    var tabIndex by rememberSaveable { mutableIntStateOf(0) }
+    val selectedCategory = categories.getOrElse(tabIndex) { categories.first() }
+
     val models = remember(selectedCategory, PhoneCheck.result) {
         val base = ModelCatalog.byCategory(selectedCategory)
         if (PhoneCheck.result == null) {
@@ -86,12 +93,6 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
             )
         }
     }
-
-    val categories = remember {
-        ModelCategory.entries.filter { ModelCatalog.byCategory(it).isNotEmpty() }
-    }
-    var tabIndex by rememberSaveable { mutableIntStateOf(0) }
-    val selectedCategory = categories.getOrElse(tabIndex) { categories.first() }
 
     // SAF gives us a content URI; copy into app storage so the engine sees a real file.
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
