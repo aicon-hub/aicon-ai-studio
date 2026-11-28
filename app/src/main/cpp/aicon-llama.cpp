@@ -9,6 +9,8 @@
 #include <sstream>
 #include <vector>
 #include <unistd.h>
+#include <chrono>
+#include <cstring>
 #include <sampling.h>
 
 #include "aicon-log.h"
@@ -19,10 +21,11 @@
 #include "mtmd-helper.h"
 
 constexpr int   N_THREADS_MIN           = 2;
-constexpr int   N_THREADS_MAX           = 4;
-constexpr int   N_THREADS_HEADROOM      = 2;
+constexpr int   N_THREADS_MAX           = 6;   // auto decode threads cap
+constexpr int   N_THREADS_HEADROOM      = 1;
+constexpr int   N_THREADS_BATCH_MAX     = 8;   // auto prompt-processing cap
 
-constexpr int   DEFAULT_CONTEXT_SIZE    = 4096;
+constexpr int   DEFAULT_CONTEXT_SIZE    = 2048;
 constexpr int   OVERFLOW_HEADROOM       = 4;
 constexpr int   BATCH_SIZE              = 512;
 constexpr float DEFAULT_SAMPLER_TEMP    = 0.7f;
@@ -33,6 +36,23 @@ static common_batch                  g_batch;
 static common_chat_templates_ptr     g_chat_templates;
 static common_sampler              * g_sampler;
 static std::string                   g_chat_template_override;
+
+// Speed settings from the app's Settings screen. Zero means auto: decode
+// threads scale with the core count, context size uses DEFAULT_CONTEXT_SIZE.
+static int  g_perf_threads = 0;
+static int  g_perf_ctx     = 0;
+static bool g_perf_kv_q8   = false;
+static int  g_n_ctx        = DEFAULT_CONTEXT_SIZE;
+
+// Measured performance of the current session, read back from Kotlin.
+static double g_last_prefill_tps = 0.0;
+static long   g_decode_tokens    = 0;
+static double g_decode_ms        = 0.0;
+
+static double now_ms() {
+    using namespace std::chrono;
+    return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
+}
 
 // Some GGUFs (WePM, for one) carry a chat template llama.cpp v1.1.0 cannot
 // apply. When template work throws, retry once with this ChatML template so
@@ -66,8 +86,15 @@ static bool fall_back_to_chatml(const char *where) {
 static mtmd_context                * g_mtmd = nullptr;
 
 static int best_thread_count() {
+    if (g_perf_threads > 0) { return g_perf_threads; }
     return std::max(N_THREADS_MIN, std::min(N_THREADS_MAX,
                         (int) sysconf(_SC_NPROCESSORS_ONLN) - N_THREADS_HEADROOM));
+}
+
+static int best_batch_thread_count() {
+    if (g_perf_threads > 0) { return g_perf_threads; }
+    return std::max(N_THREADS_MIN, std::min(N_THREADS_BATCH_MAX,
+                        (int) sysconf(_SC_NPROCESSORS_ONLN)));
 }
 
 extern "C"
@@ -102,21 +129,29 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeLoadModel(JNIEnv *env
     return 0;
 }
 
-static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT_CONTEXT_SIZE) {
+static llama_context *init_context(llama_model *model) {
     if (!model) {
         LOGe("%s: model cannot be null", __func__);
         return nullptr;
     }
 
+    g_n_ctx = g_perf_ctx > 0 ? g_perf_ctx : DEFAULT_CONTEXT_SIZE;
     const int n_threads = best_thread_count();
-    LOGi("%s: using %d threads", __func__, n_threads);
+    const int n_threads_batch = best_batch_thread_count();
+    LOGi("%s: ctx=%d, decode threads=%d, batch threads=%d, kv q8=%d",
+         __func__, g_n_ctx, n_threads, n_threads_batch, (int) g_perf_kv_q8);
 
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = n_ctx;
+    ctx_params.n_ctx = g_n_ctx;
     ctx_params.n_batch = BATCH_SIZE;
     ctx_params.n_ubatch = BATCH_SIZE;
     ctx_params.n_threads = n_threads;
-    ctx_params.n_threads_batch = n_threads;
+    ctx_params.n_threads_batch = n_threads_batch;
+    if (g_perf_kv_q8) {
+        // Quarter the KV cache memory bandwidth at a small quality cost.
+        ctx_params.type_k = GGML_TYPE_Q8_0;
+        ctx_params.type_v = GGML_TYPE_Q8_0;
+    }
     auto *context = llama_init_from_model(g_model, ctx_params);
     if (context == nullptr) {
         LOGe("%s: llama_init_from_model() returned null", __func__);
@@ -224,6 +259,8 @@ static void reset_short_term_states() {
     stop_generation_position = 0;
     cached_token_chars.clear();
     assistant_ss.str("");
+    g_decode_tokens = 0;
+    g_decode_ms = 0.0;
 }
 
 static int decode_tokens_in_batches(
@@ -236,7 +273,7 @@ static int decode_tokens_in_batches(
         const int cur_batch_size = std::min((int) tokens.size() - i, BATCH_SIZE);
         batch.clear();
 
-        if (start_pos + i + cur_batch_size >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
+        if (start_pos + i + cur_batch_size >= g_n_ctx - OVERFLOW_HEADROOM) {
             LOGw("%s: batch won't fit into context, shifting", __func__);
             shift_context();
         }
@@ -293,7 +330,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessSystemPrompt(
 
     const auto system_tokens = common_tokenize(g_context, formatted_system_prompt,
                                                has_chat_template, has_chat_template);
-    const int max_batch_size = DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM;
+    const int max_batch_size = g_n_ctx - OVERFLOW_HEADROOM;
     if ((int) system_tokens.size() > max_batch_size) {
         LOGe("%s: system prompt too long: %d tokens, max %d",
              __func__, (int) system_tokens.size(), max_batch_size);
@@ -340,16 +377,21 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
     auto user_tokens = common_tokenize(g_context, formatted_user_prompt, has_chat_template, has_chat_template);
 
     const int user_prompt_size = (int) user_tokens.size();
-    const int max_batch_size = DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM;
+    const int max_batch_size = g_n_ctx - OVERFLOW_HEADROOM;
     if (user_prompt_size > max_batch_size) {
         const int skipped_tokens = user_prompt_size - max_batch_size;
         user_tokens.resize(max_batch_size);
         LOGw("%s: user prompt too long, skipped %d tokens", __func__, skipped_tokens);
     }
 
+    const double prefill_t0 = now_ms();
     if (decode_tokens_in_batches(g_context, g_batch, user_tokens, current_position, true)) {
         LOGe("%s: llama_decode() failed", __func__);
         return 2;
+    }
+    const double prefill_ms = now_ms() - prefill_t0;
+    if (prefill_ms > 0) {
+        g_last_prefill_tps = user_prompt_size / (prefill_ms / 1000.0);
     }
 
     current_position += user_prompt_size;
@@ -450,22 +492,27 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPromptWith
     }
 
     const llama_pos n_pos = mtmd_helper_get_n_pos(chunks);
-    if (current_position + n_pos > DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
+    if (current_position + n_pos > g_n_ctx - OVERFLOW_HEADROOM) {
         LOGw("%s: image+prompt needs %d positions, only %d left", __func__,
-             (int) n_pos, (int) (DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM - current_position));
+             (int) n_pos, (int) (g_n_ctx - OVERFLOW_HEADROOM - current_position));
         mtmd_input_chunks_free(chunks);
         mtmd_bitmap_free(bw.bitmap);
         return 4;
     }
 
     llama_pos new_n_past = current_position;
+    const double prefill_t0 = now_ms();
     res = mtmd_helper_eval_chunks(g_mtmd, g_context, chunks, current_position, 0,
                                   BATCH_SIZE, /* logits_last */ true, &new_n_past);
+    const double prefill_ms = now_ms() - prefill_t0;
     mtmd_input_chunks_free(chunks);
     mtmd_bitmap_free(bw.bitmap);
     if (res != 0) {
         LOGe("%s: mtmd_helper_eval_chunks failed w/ %d", __func__, res);
         return 5;
+    }
+    if (prefill_ms > 0) {
+        g_last_prefill_tps = n_pos / (prefill_ms / 1000.0);
     }
 
     current_position = new_n_past;
@@ -507,19 +554,17 @@ static bool is_valid_utf8(const char *string) {
     return true;
 }
 
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeGenerateNextToken(
-        JNIEnv *env,
-        jobject /*unused*/
-) {
-    if (current_position >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
+// Generate one token. Returns true when generation should stop (EOG,
+// predict limit, or decode error); the produced text piece, if any, is in
+// out_piece (empty while a multi-byte UTF-8 character is still assembling).
+static bool generate_one(std::string &out_piece) {
+    if (current_position >= g_n_ctx - OVERFLOW_HEADROOM) {
         LOGw("%s: context full, shifting", __func__);
         shift_context();
     }
 
     if (current_position >= stop_generation_position) {
-        return nullptr;
+        return true;
     }
 
     const auto new_token_id = common_sampler_sample(g_sampler, g_context, -1);
@@ -529,30 +574,131 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeGenerateNextToken(
     g_batch.add(new_token_id, current_position, 0, true);
     if (llama_process(g_context, LLAMA_PROCESS_TYPE_DECODE, g_batch.get()) != 0) {
         LOGe("%s: llama_decode() failed for generated token", __func__);
-        return nullptr;
+        return true;
     }
 
     current_position++;
+    g_decode_tokens++;
 
     if (llama_vocab_is_eog(llama_model_get_vocab(g_model), new_token_id)) {
         chat_add_and_format(ROLE_ASSISTANT, assistant_ss.str());
-        return nullptr;
+        return true;
     }
 
-    auto new_token_chars = common_token_to_piece(g_context, new_token_id);
-    cached_token_chars += new_token_chars;
-
-    jstring result = nullptr;
+    cached_token_chars += common_token_to_piece(g_context, new_token_id);
     if (is_valid_utf8(cached_token_chars.c_str())) {
-        result = env->NewStringUTF(cached_token_chars.c_str());
+        out_piece = cached_token_chars;
         assistant_ss << cached_token_chars;
         cached_token_chars.clear();
-    } else {
-        result = env->NewStringUTF("");
+    }
+    return false;
+}
+
+// Generate up to max_pieces text pieces in one JNI round trip. An empty
+// array means the reply is finished.
+extern "C"
+JNIEXPORT jobjectArray JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeGenerateTokens(
+        JNIEnv *env,
+        jobject /*unused*/,
+        jint max_pieces
+) {
+    std::vector<std::string> pieces;
+    const double t0 = now_ms();
+    for (int i = 0; i < max_pieces; i++) {
+        std::string piece;
+        if (generate_one(piece)) { break; }
+        if (!piece.empty()) { pieces.push_back(piece); }
+    }
+    g_decode_ms += now_ms() - t0;
+
+    jclass string_class = env->FindClass("java/lang/String");
+    jobjectArray result = env->NewObjectArray((jsize) pieces.size(), string_class, nullptr);
+    for (jsize i = 0; i < (jsize) pieces.size(); i++) {
+        env->SetObjectArrayElement(result, i, env->NewStringUTF(pieces[i].c_str()));
     }
     return result;
 }
 
+extern "C"
+JNIEXPORT jdoubleArray JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeGetPerfStats(JNIEnv *env, jobject /*unused*/) {
+    jdouble stats[3];
+    stats[0] = g_last_prefill_tps;
+    stats[1] = g_decode_ms > 0 ? g_decode_tokens / (g_decode_ms / 1000.0) : 0.0;
+    stats[2] = (jdouble) g_decode_tokens;
+    jdoubleArray result = env->NewDoubleArray(3);
+    env->SetDoubleArrayRegion(result, 0, 3, stats);
+    return result;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeSetPerformance(
+        JNIEnv * /*env*/,
+        jobject /*unused*/,
+        jint threads,
+        jint n_ctx,
+        jboolean kv_q8
+) {
+    g_perf_threads = threads;
+    g_perf_ctx = n_ctx;
+    g_perf_kv_q8 = kv_q8 == JNI_TRUE;
+    LOGi("%s: threads=%d ctx=%d kv_q8=%d", __func__,
+         g_perf_threads, g_perf_ctx, (int) g_perf_kv_q8);
+}
+
+// Indicative device benchmark for the "Check this phone" card: memory copy
+// throughput and floating-point throughput, plus the online core count. It
+// is a micro-benchmark, not an inference measurement; the UI labels it as
+// such.
+extern "C"
+JNIEXPORT jdoubleArray JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeRunBenchmark(JNIEnv *env, jobject /*unused*/) {
+    double mem_gbs = 0.0;
+    double fp_gflops = 0.0;
+    try {
+        const size_t bytes = 64u << 20;
+        std::vector<char> a(bytes), b(bytes);
+        memset(a.data(), 1, bytes);
+        memset(b.data(), 2, bytes);
+        const int copies = 12;
+        const double t0 = now_ms();
+        for (int i = 0; i < copies; i++) {
+            memcpy(a.data(), b.data(), bytes);
+        }
+        const double mem_ms = now_ms() - t0;
+        if (mem_ms > 0) {
+            mem_gbs = (double) bytes * copies / (mem_ms / 1000.0) / 1e9;
+        }
+
+        const size_t n = 1u << 20;
+        std::vector<float> x(n, 0.5f);
+        const int passes = 200;
+        const double t1 = now_ms();
+        for (int p = 0; p < passes; p++) {
+            for (size_t i = 0; i < n; i++) {
+                x[i] = x[i] * 1.000001f + 0.25f;
+            }
+        }
+        const double fp_ms = now_ms() - t1;
+        volatile float sink = x[0];
+        (void) sink;
+        if (fp_ms > 0) {
+            fp_gflops = 2.0 * n * passes / (fp_ms * 1e6);
+        }
+    } catch (const std::exception &e) {
+        LOGe("%s: %s", __func__, e.what());
+    }
+
+    jdouble out[3];
+    out[0] = mem_gbs;
+    out[1] = fp_gflops;
+    out[2] = (jdouble) sysconf(_SC_NPROCESSORS_ONLN);
+    jdoubleArray result = env->NewDoubleArray(3);
+    env->SetDoubleArrayRegion(result, 0, 3, out);
+    return result;
+}
 extern "C"
 JNIEXPORT void JNICALL
 Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeUnload(JNIEnv * /*unused*/, jobject /*unused*/) {
