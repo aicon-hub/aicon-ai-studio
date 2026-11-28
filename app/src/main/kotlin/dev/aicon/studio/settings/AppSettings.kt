@@ -8,7 +8,8 @@ import androidx.compose.runtime.setValue
 
 /**
  * User-visible settings, kept in SharedPreferences. Theme and accent apply
- * app-wide through Compose state.
+ * app-wide through Compose state. The default accent is the AiCoN brand
+ * orange; the other swatches are alternates the user can pick.
  */
 object AppSettings {
 
@@ -17,21 +18,21 @@ object AppSettings {
     var themeMode by mutableStateOf(ThemeMode.SYSTEM)
         private set
 
-    var accentArgb by mutableLongStateOf(0xFF7C5CFF)
+    var accentArgb by mutableLongStateOf(BRAND_ORANGE)
         private set
 
     private const val PREFS = "aicon_settings"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_ACCENT = "accent_argb"
-    private const val IRIS = 0xFF7C5CFFL
+    private const val BRAND_ORANGE = 0xFFFF682FL
 
-    /** Iris plus a few readable accents for the settings swatches. */
+    /** Brand orange first, then a few readable alternates. */
     val accentChoices: List<Long> = listOf(
-        IRIS,       // Iris (brand)
-        0xFF3B82F6, // Blue
-        0xFF14B8A6, // Teal
-        0xFFF59E0B, // Amber
-        0xFFF43F5E, // Rose
+        BRAND_ORANGE, // AiCoN orange (brand)
+        0xFF7C5CFF,   // Iris
+        0xFF3B82F6,   // Blue
+        0xFF14B8A6,   // Teal
+        0xFFF43F5E,   // Rose
     )
 
     fun load(context: Context) {
@@ -39,7 +40,7 @@ object AppSettings {
         themeMode = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: ThemeMode.SYSTEM.name)
         }.getOrDefault(ThemeMode.SYSTEM)
-        accentArgb = prefs.getLong(KEY_ACCENT, IRIS)
+        accentArgb = prefs.getLong(KEY_ACCENT, BRAND_ORANGE)
     }
 
     fun setThemeMode(context: Context, mode: ThemeMode) {
