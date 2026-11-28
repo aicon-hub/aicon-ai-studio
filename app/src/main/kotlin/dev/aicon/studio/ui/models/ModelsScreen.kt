@@ -51,6 +51,7 @@ import dev.aicon.studio.model.ModelCatalog
 import dev.aicon.studio.model.ModelCategory
 import dev.aicon.studio.model.ModelInfo
 import dev.aicon.studio.model.ModelManager
+import dev.aicon.studio.model.ModelStats
 import dev.aicon.studio.model.Readiness
 import kotlinx.coroutines.launch
 import java.io.File
@@ -252,6 +253,7 @@ private fun ModelCard(
                 "$download$ram  ·  License: ${info.license}",
                 style = MaterialTheme.typography.bodySmall,
             )
+            CostLines(info)
             when {
                 !info.downloadable -> {
                     Text(
@@ -318,6 +320,49 @@ private fun ModelCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CostLines(info: ModelInfo) {
+    val context = LocalContext.current
+    ModelStats.version // recompose when a measurement lands
+    val measured = ModelStats.get(context, info.id)
+    if (measured != null) {
+        Text(
+            "Measured on this phone: %.1f tok/s over %d replies".format(
+                measured.tokPerSec, measured.replies,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+        )
+    } else {
+        val check = PhoneCheck.result ?: return
+        val ramGb = (info.ramMb ?: return).toDouble() / 1000.0
+        // Rough estimate for a 1 GB model on each tier, scaled by model size.
+        val base = when (check.tier) {
+            PhoneCheck.Tier.ENTRY -> 2.0
+            PhoneCheck.Tier.MID -> 5.0
+            PhoneCheck.Tier.FLAGSHIP -> 12.0
+        }
+        val est = base * 1.0 / ramGb.coerceAtLeast(0.5)
+        val lo = est * 0.5
+        val hi = est * 1.5
+        // Battery: about 4 W while generating; energy for a 100-token reply.
+        val midTps = (lo + hi) / 2
+        val wh = 4.0 * (100.0 / midTps) / 3600.0
+        Text(
+            "Estimated for this phone: %.1f-%.1f tok/s, about %.3f Wh per " +
+                "100-token reply".format(lo, hi, wh),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (check.tier == PhoneCheck.Tier.ENTRY ||
+            PhoneCheck.fitFor(info.ramMb) == PhoneCheck.Fit.TIGHT
+        ) {
+            Text(
+                "Long sessions can warm the phone and slow it down.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
