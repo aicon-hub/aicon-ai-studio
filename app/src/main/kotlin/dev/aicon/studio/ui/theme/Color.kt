@@ -2,10 +2,10 @@ package dev.aicon.studio.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** AiCoN brand orange, from the official AiCoN logo (#FF682F). */
-val BrandOrange = Color(0xFFFF682F)
-val BrandOrangeDark = Color(0xFFFF8A5C)
-val InkLight = Color(0xFF17130F)
-val InkDark = Color(0xFFFFF4EE)
-val SurfaceLight = Color(0xFFFFFBF8)
-val SurfaceDark = Color(0xFF1D130D)
+/** AiCoN AI Studio iris, from the picked logo (#7C5CFF, gradient to #6A4DFF). */
+val BrandIris = Color(0xFF7C5CFF)
+val BrandIrisDeep = Color(0xFF6A4DFF)
+val InkLight = Color(0xFF16131C)
+val InkDark = Color(0xFFF4F1FB)
+val SurfaceLight = Color(0xFFFBFAFF)
+val SurfaceDark = Color(0xFF17131F)
