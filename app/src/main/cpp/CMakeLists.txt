@@ -21,6 +21,9 @@ set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+# mtmd (image/audio input) as a standalone library: vision models load their
+# mmproj adapter through it. Video stays off (needs a subprocess/ffmpeg).
+set(LLAMA_BUILD_MTMD ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(llama)
 
 if(ANDROID_ABI STREQUAL "arm64-v8a")
@@ -43,10 +46,12 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         ${llama_SOURCE_DIR}/common
         ${llama_SOURCE_DIR}/include
         ${llama_SOURCE_DIR}/ggml/include
-        ${llama_SOURCE_DIR}/ggml/src)
+        ${llama_SOURCE_DIR}/ggml/src
+        ${llama_SOURCE_DIR}/tools/mtmd)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
         llama
         llama-common
+        mtmd
         android
         log)
