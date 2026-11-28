@@ -29,6 +29,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -60,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.aicon.studio.R
+import dev.aicon.studio.savings.Savings
 import java.io.File
 import java.io.FileOutputStream
 
@@ -214,6 +217,7 @@ fun ChatScreen(
                     }
                 }
             }
+            ImpactStrip(context)
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -384,6 +388,93 @@ private fun Bubble(msg: ChatMessage, onSave: (() -> Unit)?) {
                 TextButton(onClick = onSave) { Text("Save to file") }
             }
         }
+    }
+}
+
+@Composable
+private fun ImpactStrip(context: android.content.Context) {
+    Savings.version // recompose on new tokens
+    if (!Savings.enabled) return
+    var showDetails by remember { mutableStateOf(false) }
+    val streak = Savings.streak(context)
+    val level = Savings.level()
+    val (whLo, whHi) = Savings.savedWh()
+    val (mlLo, mlHi) = Savings.savedMl()
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDetails = true },
+    ) {
+        Text(
+            buildString {
+                if (streak > 0) append("${streak}-day streak  ·  ")
+                append("Level ${level.number} ${level.name}  ·  ")
+                append(
+                    "Est. saved vs cloud: %.2f-%.1f Wh, %.0f-%.0f mL water".format(
+                        whLo, whHi, mlLo, mlHi,
+                    ),
+                )
+            },
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        )
+    }
+    if (showDetails) {
+        AlertDialog(
+            onDismissRequest = { showDetails = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val text = "On-device AI on my phone with AiCoN AI Studio: " +
+                        (if (streak > 0) "$streak-day streak, " else "") +
+                        "level ${level.name}. Estimated savings vs cloud AI: " +
+                        "%.2f-%.1f Wh and %.0f-%.0f mL water.".format(whLo, whHi, mlLo, mlHi)
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, text)
+                    }
+                    context.startActivity(
+                        android.content.Intent.createChooser(intent, "Share your impact"),
+                    )
+                    showDetails = false
+                }) { Text("Share") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        Savings.reset(context)
+                        showDetails = false
+                    }) { Text("Reset") }
+                    TextButton(onClick = { showDetails = false }) { Text("Close") }
+                }
+            },
+            title = { Text("Your impact") },
+            text = {
+                Text(
+                    "${Savings.totalTokens} tokens generated on this phone. " +
+                        (if (streak > 0) "$streak-day streak. " else "") +
+                        "Level ${level.number} ${level.name}" +
+                        (level.nextAt?.let { " (next at $it tokens)" } ?: "") + ".
+
+" +
+                        "Estimated savings vs running the same tokens on a cloud model: " +
+                        "%.2f-%.1f Wh of electricity and %.0f-%.0f mL of water.
+
+".format(
+                            whLo, whHi, mlLo, mlHi,
+                        ) +
+                        "How we estimate: a 2025 Google measurement puts a median Gemini " +
+                        "Apps text prompt at about 0.24 Wh and 0.26 mL of water; Li et al. " +
+                        "(Making AI Less Thirsty, 2023) estimate several Wh and 7-48 mL per " +
+                        "medium GPT-3-class request, varying with datacenter location and " +
+                        "efficiency (published PUE 1.09-1.17, water use 0.27-0.94 L/kWh). " +
+                        "Scaled to tokens we count 0.8-33 Wh and 0.9-100 mL per 1,000 " +
+                        "tokens and show the whole range. These are rough estimates, not " +
+                        "measurements. Counting happens fully on your phone and can be " +
+                        "turned off in Settings.",
+                )
+            },
+        )
     }
 }
 
