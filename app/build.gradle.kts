@@ -73,7 +73,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            res.srcDir(interFontsDir)
+            res.srcDir("build/generated/res/inter")
         }
     }
 
