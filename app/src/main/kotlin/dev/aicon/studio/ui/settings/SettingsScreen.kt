@@ -16,11 +16,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -102,6 +104,46 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                 }
             }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Speed", style = MaterialTheme.typography.titleMedium)
+                Text("Threads", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Auto", 2 to "2", 4 to "4", 6 to "6", 8 to "8").forEach { (value, label) ->
+                        FilterChip(
+                            selected = AppSettings.perfThreads == value,
+                            onClick = { AppSettings.setPerfThreads(context, value) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Text("Context size", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppSettings.contextSizeChoices.forEach { size ->
+                        FilterChip(
+                            selected = AppSettings.perfContextSize == size,
+                            onClick = { AppSettings.setPerfContextSize(context, size) },
+                            label = { Text(size.toString()) },
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Quantized KV cache (q8_0)", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Faster on long chats, small quality cost",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Switch(
+                        checked = AppSettings.perfKvQ8,
+                        onCheckedChange = { AppSettings.setPerfKvQ8(context, it) },
+                    )
+                }
+                Text(
+                    "Applies the next time a model loads.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("About", style = MaterialTheme.typography.titleMedium)
                 Text("AiCoN AI Studio $version", style = MaterialTheme.typography.bodyMedium)
@@ -112,3 +154,4 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 }
+
