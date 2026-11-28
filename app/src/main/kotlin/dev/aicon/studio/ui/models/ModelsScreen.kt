@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,11 +46,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.aicon.studio.benchmark.PhoneCheck
 import dev.aicon.studio.model.ModelCatalog
 import dev.aicon.studio.model.ModelCategory
 import dev.aicon.studio.model.ModelInfo
 import dev.aicon.studio.model.ModelManager
 import dev.aicon.studio.model.Readiness
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
@@ -68,6 +71,9 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
 
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) { PhoneCheck.load(context) }
 
     val categories = remember {
         ModelCategory.entries.filter { ModelCatalog.byCategory(it).isNotEmpty() }
@@ -128,7 +134,22 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(ModelCatalog.byCategory(selectedCategory), key = { it.id }) { info ->
+                item {
+                    PhoneCheckCard(
+                        onRun = { scope.launch { PhoneCheck.run(context) } },
+                    )
+                }
+                val models = remember(selectedCategory, PhoneCheck.result) {
+                    val base = ModelCatalog.byCategory(selectedCategory)
+                    if (PhoneCheck.result == null) {
+                        base
+                    } else {
+                        base.sortedWith(
+                            compareBy({ PhoneCheck.fitRank(it.ramMb) }, { it.ramMb ?: Int.MAX_VALUE }),
+                        )
+                    }
+                }
+                items(models, key = { it.id }) { info ->
                     ModelCard(info, downloads[info.id], loadedPath, loading, vm)
                 }
                 if (selectedCategory == ModelCategory.CHAT) {
@@ -195,6 +216,27 @@ private fun ModelCard(
                     modifier = Modifier.weight(1f),
                 )
                 ReadinessBadge(info.readiness)
+                PhoneCheck.fitFor(info.ramMb)?.let { fit ->
+                    val (bg, fg) = when (fit) {
+                        PhoneCheck.Fit.GOOD ->
+                            MaterialTheme.colorScheme.primaryContainer to
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                        PhoneCheck.Fit.TIGHT ->
+                            MaterialTheme.colorScheme.tertiaryContainer to
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                        PhoneCheck.Fit.TOO_BIG ->
+                            MaterialTheme.colorScheme.errorContainer to
+                                MaterialTheme.colorScheme.onErrorContainer
+                    }
+                    Surface(color = bg, shape = MaterialTheme.shapes.small) {
+                        Text(
+                            fit.label,
+                            color = fg,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
             }
             Text(info.summary, style = MaterialTheme.typography.bodySmall)
             val ram = info.ramMb?.let {
@@ -275,6 +317,56 @@ private fun ModelCard(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhoneCheckCard(onRun: () -> Unit) {
+    val result = PhoneCheck.result
+    val running = PhoneCheck.running
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Check this phone",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (running) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                } else {
+                    TextButton(onClick = onRun) {
+                        Text(if (result == null) "Run" else "Re-check")
+                    }
+                }
+            }
+            if (result == null) {
+                Text(
+                    "Measures this phone (about 2 seconds, fully on-device) and " +
+                        "sorts models by how well they fit.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                Text(
+                    "${result.tier.label} phone  ·  ${result.cores} cores  ·  " +
+                        "RAM %.1f GB".format(result.totalRamBytes / 1e9),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    "Measured: memory %.1f GB/s, compute %.0f GFLOPS".format(
+                        result.memoryCopyGBs, result.fpGFLOPS,
+                    ) + if (result.soc.isNotBlank()) "  ·  Chip: ${result.soc}" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Models are sorted by fit: Runs well first, Too big last.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
