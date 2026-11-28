@@ -4,9 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -123,7 +127,19 @@ private fun DrawerContent(
 ) {
     val sessions by chatVm.sessions.collectAsStateWithLifecycle()
     val current by chatVm.currentSession.collectAsStateWithLifecycle()
+    val darkDrawer = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
+    // Official AiCoN lockup; the wordmark lettering is artwork, not a font.
+    Image(
+        painter = painterResource(
+            if (darkDrawer) R.drawable.ic_aicon_lockup_light else R.drawable.ic_aicon_lockup_dark,
+        ),
+        contentDescription = "AiCoN",
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .height(28.dp),
+    )
+    HorizontalDivider()
     Row(
         modifier = Modifier
             .fillMaxWidth()
