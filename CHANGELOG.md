@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
+### Added
+- Speed: live tok/s and words/min readout while a reply streams, and a measured-speed caption under every finished reply.
+- Speed settings: decode threads (Auto or 2-8), context size (1024/2048/4096), and a quantized KV cache (q8_0) switch, applied on the next model load.
+- Check this phone: a 2-second on-device benchmark (memory bandwidth, FP compute, cores, RAM, chip) that buckets the phone as entry, mid-range or flagship and sorts the catalog by fit with Runs well / Tight fit / Too big badges.
+- Per-model cost lines: measured tok/s on this phone once you have chatted, otherwise an estimated tok/s and energy range for the phone's tier, plus a warm-up note where it applies.
+- Impact tracking: on-device token count, day streaks and levels, with an estimated range of electricity and water saved versus cloud AI. Fully local, estimates shown as ranges with published sources, a share text, a reset, and an off switch in Settings.
+
+### Changed
+- Faster generation: tokens now flow in batches instead of one JNI round trip each, and decode threads scale with the core count by default.
+- A RAM guard refuses to load a model that does not fit in available memory instead of letting the phone thrash.
+- The app icon is now the purple iris mark on a white tile.
+
 ## [0.2.2] - 2026-11-28
 
 ### Added
@@ -67,3 +81,4 @@
 - Docs: threat model, security policy, architecture plan.
 - Brand: aperture mark (SVG + PNG), dark and light lockups, app icon.
 - llama.cpp v1.1.0 engine over a JNI bridge, built from source; basic chat screen with model picking.
+
