@@ -2,6 +2,7 @@ package dev.aicon.studio.settings
 
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -33,13 +34,27 @@ object AppSettings {
     var perfKvQ8 by mutableStateOf(false)
         private set
 
+    /** Layout density scale: 0.88 compact, 1.0 comfortable, 1.12 spacious. */
+    var densityScale by mutableFloatStateOf(1.0f)
+        private set
+
+    /** Text size scale: 0.9 small, 1.0 default, 1.15 large. */
+    var textScale by mutableFloatStateOf(1.0f)
+        private set
+
     private const val PREFS = "aicon_settings"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_ACCENT = "accent_argb"
     private const val KEY_PERF_THREADS = "perf_threads"
     private const val KEY_PERF_CTX = "perf_context_size"
     private const val KEY_PERF_KV_Q8 = "perf_kv_q8"
+    private const val KEY_DENSITY = "density_scale"
+    private const val KEY_TEXT = "text_scale"
     val contextSizeChoices: List<Int> = listOf(1024, 2048, 4096)
+    val densityChoices: List<Pair<Float, String>> =
+        listOf(0.88f to "Compact", 1.0f to "Comfortable", 1.12f to "Spacious")
+    val textScaleChoices: List<Pair<Float, String>> =
+        listOf(0.9f to "Small", 1.0f to "Default", 1.15f to "Large")
     private const val BRAND_IRIS = 0xFF7C5CFFL
 
     /** Brand iris first, then a few readable alternates. */
@@ -60,6 +75,8 @@ object AppSettings {
         perfThreads = prefs.getInt(KEY_PERF_THREADS, 0)
         perfContextSize = prefs.getInt(KEY_PERF_CTX, 2048)
         perfKvQ8 = prefs.getBoolean(KEY_PERF_KV_Q8, false)
+        densityScale = prefs.getFloat(KEY_DENSITY, 1.0f)
+        textScale = prefs.getFloat(KEY_TEXT, 1.0f)
     }
 
     fun setThemeMode(context: Context, mode: ThemeMode) {
@@ -85,6 +102,16 @@ object AppSettings {
     fun setPerfKvQ8(context: Context, enabled: Boolean) {
         perfKvQ8 = enabled
         prefs(context).edit().putBoolean(KEY_PERF_KV_Q8, enabled).apply()
+    }
+
+    fun setDensityScale(context: Context, scale: Float) {
+        densityScale = scale
+        prefs(context).edit().putFloat(KEY_DENSITY, scale).apply()
+    }
+
+    fun setTextScale(context: Context, scale: Float) {
+        textScale = scale
+        prefs(context).edit().putFloat(KEY_TEXT, scale).apply()
     }
 
     private fun prefs(context: Context) =
