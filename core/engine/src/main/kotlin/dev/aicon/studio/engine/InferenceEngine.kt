@@ -21,6 +21,15 @@ interface InferenceEngine {
     fun setChatTemplate(template: String?) {}
 
     /**
+     * Optional vision adapter (mmproj GGUF) for multimodal models.
+     * Set before [load]. Default: ignored by the backend.
+     */
+    fun setMmproj(mmprojPath: String?) {}
+
+    /** True when the loaded model can accept images. */
+    fun hasVision(): Boolean = false
+
+    /**
      * Load [modelPath] (a local file the user picked or downloaded).
      * @throws EngineException if the file is missing, unsupported, or does
      *         not fit the device's memory.
@@ -35,6 +44,13 @@ interface InferenceEngine {
      * reply is done and throws [EngineException] on failure.
      */
     fun generate(prompt: String, history: List<ChatTurn>): Flow<String>
+
+    /**
+     * Same as [generate], with one image attached. Backends without vision
+     * fall back to the text-only path; callers should check [hasVision].
+     */
+    fun generate(prompt: String, history: List<ChatTurn>, imagePath: String?): Flow<String> =
+        generate(prompt, history)
 
     /** Release the loaded model and native resources. */
     suspend fun unload()
