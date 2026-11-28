@@ -3,6 +3,7 @@ package dev.aicon.studio
 import android.content.Context
 import dev.aicon.studio.engine.EngineException
 import dev.aicon.studio.engine.llamacpp.LlamaCppEngine
+import dev.aicon.studio.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +49,11 @@ object EngineHolder {
                 val engine = engine(context)
                 engine.setChatTemplate(template)
                 engine.setMmproj(mmprojPath)
+                engine.setPerformance(
+                    AppSettings.perfThreads,
+                    AppSettings.perfContextSize,
+                    AppSettings.perfKvQ8,
+                )
                 engine.load(path)
             }
             _loadedModelPath.value = path
