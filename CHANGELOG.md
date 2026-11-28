@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-28
+
+### Added
+- Model catalog expansion per the approved phone-models list: 28 new ready-to-download models with verified SHA-256 checksums, covering chat (SmolLM2 135M/360M/1.7B, SmolLM3 3B, Qwen3 0.6B/1.7B/4B, Qwen2.5 0.5B/1.5B/3B and Coder 1.5B, Llama 3.2 1B/3B, Gemma 3 1B/4B, Gemma 3n E2B, LFM2 1.2B, DeepSeek R1 Distill 1.5B, Granite 3.3 2B, Falcon3 3B, Phi-3.5 mini, Phi-4 mini, Mistral 7B for flagships) and vision (SmolVLM 256M/500M, Qwen2-VL 2B, Qwen2.5-VL 3B, MiniCPM-V 4.5) with their mmproj adapters.
+- Two new catalog tabs: OCR (PaddleOCR, TrOCR) and Vision tools (MediaPipe, YOLO11n, NanoDet, RMBG-1.4, Real-ESRGAN), all marked Needs runtime work with their licenses shown.
+- Every other approved model from the list now appears in the catalog with an honest state: translation (M2M100, NLLB-200, MADLAD-400, OPUS-MT, HY-MT1.5), speech to text (Whisper family, Distil-Whisper, Moonshine, SenseVoice, Zipformer, Silero VAD, Vosk), text to speech (Piper, KittenTTS, MeloTTS, Matcha-TTS), embeddings (MiniLM, nomic, e5, bge-m3, EmbeddingGemma), plus TinyLlama, MiniCPM-V 4, Moondream2, InternVL3 and LFM2-VL marked Not yet where no verified download exists.
+- Licenses are named per entry, including non-commercial flags (NLLB-200, RMBG-1.4, Qwen2.5 3B research license) and YOLO's AGPL.
+
 ## [0.2.1] - 2026-11-28
 
 ### Fixed
