@@ -10,6 +10,13 @@ plugins {
 // Inter (SIL OFL), pinned by release URL and SHA-256. Downloaded at build
 // time into a generated res dir so the repo stays text-only and the font
 // provenance is verifiable.
+// Fixed release signing. The keystore is decoded by CI from GitHub
+// Secrets; local and fork builds without it fall back to the debug key.
+// The same key signs debug and release builds so updates install in place.
+val aiconStoreFile = providers.environmentVariable("AICON_STORE_FILE").orNull
+val aiconSigningReady = aiconStoreFile != null &&
+    File(aiconStoreFile).let { it.isFile && it.length() > 0 }
+
 val interFontsDir = layout.buildDirectory.dir("generated/res/inter")
 val fetchInterFonts = tasks.register("fetchInterFonts") {
     notCompatibleWithConfigurationCache("downloads and hash-checks the Inter zip with script-local state")
@@ -56,6 +63,17 @@ val fetchInterFonts = tasks.register("fetchInterFonts") {
 
 android {
     namespace = "dev.aicon.studio"
+
+    signingConfigs {
+        if (aiconSigningReady) {
+            create("aicon") {
+                storeFile = file(aiconStoreFile!!)
+                storePassword = providers.environmentVariable("AICON_STORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("AICON_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("AICON_KEY_PASSWORD").get()
+            }
+        }
+    }
     compileSdk = 37
     ndkVersion = "28.2.13676358"
 
@@ -63,8 +81,8 @@ android {
         applicationId = "dev.aicon.studio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.2.0"
+        versionCode = 6
+        versionName = "0.2.1"
 
         ndk {
             // Phones run arm64; x86_64 covers emulators.
@@ -79,7 +97,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (aiconSigningReady) signingConfig = signingConfigs.getByName("aicon")
+        }
         release {
+            if (aiconSigningReady) signingConfig = signingConfigs.getByName("aicon")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
