@@ -37,7 +37,18 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
+      - name: Decode signing keystore
+        run: |
+          if [ -n "$KSB64" ]; then echo "$KSB64" | base64 -d > "$RUNNER_TEMP/aicon-studio.keystore"; fi
+        env:
+          KSB64: ${{ secrets.AICON_SIGNING_KEYSTORE_B64 }}
+
       - name: Build
+        env:
+          AICON_STORE_FILE: ${{ runner.temp }}/aicon-studio.keystore
+          AICON_STORE_PASSWORD: ${{ secrets.AICON_SIGNING_STORE_PASSWORD }}
+          AICON_KEY_ALIAS: ${{ secrets.AICON_SIGNING_KEY_ALIAS }}
+          AICON_KEY_PASSWORD: ${{ secrets.AICON_SIGNING_STORE_PASSWORD }}
         run: gradle assembleDebug --no-daemon
 
       - name: Stage APK
@@ -49,5 +60,5 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --title "AiCoN AI Studio ${{ github.ref_name }}" \
-            --notes "Test build, debug-signed. Install on a phone to try on-device chat. All inference runs locally." || true
+            --notes "Test build, signed with the AiCoN release key. Install on a phone to try on-device chat. All inference runs locally." || true
           gh release upload "${{ github.ref_name }}" "aicon-ai-studio-${{ github.ref_name }}-debug.apk" --clobber
