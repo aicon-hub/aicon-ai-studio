@@ -15,6 +15,12 @@ interface InferenceEngine {
     val name: String
 
     /**
+     * Optional jinja chat template used when the model file carries none.
+     * Set before [load]. Default: ignored by the backend.
+     */
+    fun setChatTemplate(template: String?) {}
+
+    /**
      * Load [modelPath] (a local file the user picked or downloaded).
      * @throws EngineException if the file is missing, unsupported, or does
      *         not fit the device's memory.
