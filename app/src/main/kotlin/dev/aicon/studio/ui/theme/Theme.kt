@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 @Composable
 fun AiCoNStudioTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    accent: Color = BrandOrange,
+    accent: Color = BrandIris,
     content: @Composable () -> Unit,
 ) {
     val scheme = if (darkTheme) {
