@@ -7,4 +7,5 @@ data class ChatMessage(
     val text: String,
     val streaming: Boolean = false,
     val attachmentName: String? = null,
+    val imagePath: String? = null,
 )
