@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-28
+
+### Added
+- Display settings: layout density (Compact, Comfortable, Spacious) and text size (Small, Default, Large), applied app-wide and persisted.
+- A branded empty-chat welcome: the iris mark with a one-line promise.
+
+### Changed
+- Full visual pass: a complete purple-tinted color system for light and dark (containers, outlines, surfaces follow the picked accent), softer shapes (10/16/22 dp), refined Inter typography spacing, and a rounded message field.
+
 ## [0.3.0] - 2026-11-28
 
 ### Added
@@ -81,4 +90,5 @@
 - Docs: threat model, security policy, architecture plan.
 - Brand: aperture mark (SVG + PNG), dark and light lockups, app icon.
 - llama.cpp v1.1.0 engine over a JNI bridge, built from source; basic chat screen with model picking.
+
 
