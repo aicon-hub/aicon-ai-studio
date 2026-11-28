@@ -4,6 +4,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import dev.aicon.studio.R
 
 /**
@@ -27,13 +28,30 @@ val AiCoNTypography = Typography(
     headlineLarge = base.headlineLarge.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
     headlineMedium = base.headlineMedium.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
     headlineSmall = base.headlineSmall.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
-    titleLarge = base.titleLarge.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
-    titleMedium = base.titleMedium.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
-    titleSmall = base.titleSmall.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
+    titleLarge = base.titleLarge.copy(
+        fontFamily = Inter,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.sp,
+    ),
+    titleMedium = base.titleMedium.copy(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.1.sp,
+    ),
+    titleSmall = base.titleSmall.copy(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.1.sp,
+    ),
     bodyLarge = base.bodyLarge.copy(fontFamily = Inter),
     bodyMedium = base.bodyMedium.copy(fontFamily = Inter),
     bodySmall = base.bodySmall.copy(fontFamily = Inter),
     labelLarge = base.labelLarge.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
     labelMedium = base.labelMedium.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
-    labelSmall = base.labelSmall.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
+    labelSmall = base.labelSmall.copy(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.4.sp,
+    ),
 )
+
