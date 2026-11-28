@@ -6,10 +6,11 @@
 
 ### Fixed
 - One fixed signing key for every build from now on (kept in GitHub Secrets, backed up in the vault). Every earlier build used a throwaway key, so Android refuses to update them in place: uninstall the old app once, then install v0.2.1. Builds from now on update over it normally.
-- Launcher icon proportions matched to the official AiCoN maskable icon so the C stays inside the adaptive mask.
+- WePM models now load. When a GGUF chat template cannot be applied, the engine retries once with a ChatML template instead of failing with "Could not seed the chat template."
+- Downloads that fail on the network now say so ("No internet connection. Check your network and tap Download again.") instead of showing the raw system error.
 
-### Notes
-- The app icon and the header and drawer art are the official AiCoN mark and lockup from aicon-hub.github.io. v0.1.x builds shipped no icon of their own, so phones still on those builds show the Android default icon.
+### Changed
+- The picked AiCoN AI Studio identity: iris mark (#7C5CFF gradient) for the launcher icon, chat header and drawer, on the dark icon tile, with iris as the default accent.
 
 ## [0.2.0] - 2026-11-28
 
