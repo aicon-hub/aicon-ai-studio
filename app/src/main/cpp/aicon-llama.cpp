@@ -33,6 +33,36 @@ static common_batch                  g_batch;
 static common_chat_templates_ptr     g_chat_templates;
 static common_sampler              * g_sampler;
 static std::string                   g_chat_template_override;
+
+// Some GGUFs (WePM, for one) carry a chat template llama.cpp v1.1.0 cannot
+// apply. When template work throws, retry once with this ChatML template so
+// the model still loads and chats.
+static const char *CHATML_FALLBACK_TEMPLATE =
+    "{% for message in messages %}"
+    "{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>' + '\\n'}}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}";
+static bool g_template_fell_back = false;
+
+static void reinit_chat_templates() {
+    if (g_model != nullptr) {
+        g_chat_templates = common_chat_templates_init(g_model, g_chat_template_override);
+    }
+}
+
+static bool fall_back_to_chatml(const char *where) {
+    if (g_template_fell_back) { return false; }
+    g_template_fell_back = true;
+    LOGe("%s: chat template could not be applied; falling back to ChatML", where);
+    g_chat_template_override.assign(CHATML_FALLBACK_TEMPLATE);
+    try {
+        reinit_chat_templates();
+    } catch (const std::exception &e) {
+        LOGe("%s: ChatML fallback failed too: %s", where, e.what());
+        return false;
+    }
+    return true;
+}
 static mtmd_context                * g_mtmd = nullptr;
 
 static int best_thread_count() {
@@ -57,6 +87,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeInit(JNIEnv *env, job
 extern "C"
 JNIEXPORT jint JNICALL
 Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeLoadModel(JNIEnv *env, jobject, jstring jmodel_path) {
+    g_template_fell_back = false;
     llama_model_params model_params = llama_model_default_params();
 
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
@@ -100,7 +131,12 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativePrepare(JNIEnv * /*en
     if (!context) { return 1; }
     g_context = context;
     g_batch = common_batch(context);
-    g_chat_templates = common_chat_templates_init(g_model, g_chat_template_override);
+    try {
+        g_chat_templates = common_chat_templates_init(g_model, g_chat_template_override);
+    } catch (const std::exception &e) {
+        LOGe("%s: %s", __func__, e.what());
+        if (!fall_back_to_chatml(__func__)) { return 2; }
+    }
     common_params_sampling sparams;
     sparams.temp = DEFAULT_SAMPLER_TEMP;
     g_sampler = common_sampler_init(g_model, sparams);
@@ -231,6 +267,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeSetChatTemplate(JNIEn
     const auto *t = env->GetStringUTFChars(jtemplate, nullptr);
     g_chat_template_override.assign(t);
     env->ReleaseStringUTFChars(jtemplate, t);
+    reinit_chat_templates();
     LOGi("%s: chat template override set (%zu bytes)", __func__, g_chat_template_override.size());
 }
 
@@ -238,7 +275,7 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessSystemPrompt(
         JNIEnv *env,
-        jobject /*unused*/,
+        jobject thiz,
         jstring jsystem_prompt
 ) {
   try {
@@ -272,6 +309,10 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessSystemPrompt(
     return 0;
   } catch (const std::exception &e) {
     LOGe("%s: %s", __func__, e.what());
+    if (fall_back_to_chatml(__func__)) {
+        return Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessSystemPrompt(
+                env, thiz, jsystem_prompt);
+    }
     return 3;
   }
 }
@@ -280,7 +321,7 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
         JNIEnv *env,
-        jobject /*unused*/,
+        jobject thiz,
         jstring juser_prompt,
         jint n_predict
 ) {
@@ -316,6 +357,10 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
     return 0;
   } catch (const std::exception &e) {
     LOGe("%s: %s", __func__, e.what());
+    if (fall_back_to_chatml(__func__)) {
+        return Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
+                env, thiz, juser_prompt, n_predict);
+    }
     return 3;
   }
 }
@@ -524,6 +569,7 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeUnload(JNIEnv * /*unu
     llama_free(g_context);
     llama_model_free(g_model);
     g_chat_template_override.clear();
+    g_template_fell_back = false;
 }
 
 extern "C"
