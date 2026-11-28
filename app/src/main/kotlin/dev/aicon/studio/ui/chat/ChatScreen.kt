@@ -64,6 +64,8 @@ fun ChatScreen(
     val busy by vm.busy.collectAsStateWithLifecycle()
     val pendingAttachment by vm.pendingAttachment.collectAsStateWithLifecycle()
     val exportRequest by vm.exportRequest.collectAsStateWithLifecycle()
+    val agentMode by vm.agentMode.collectAsStateWithLifecycle()
+    val approval by vm.approval.collectAsStateWithLifecycle()
 
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -125,6 +127,15 @@ fun ChatScreen(
                     }
                 },
                 title = { Text("AiCoN AI Studio") },
+                actions = {
+                    TextButton(onClick = { vm.setAgentMode(!agentMode) }) {
+                        Text(
+                            "Agent",
+                            color = if (agentMode) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                    }
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -165,6 +176,25 @@ fun ChatScreen(
                             null
                         },
                     )
+                }
+            }
+            approval?.let { pending ->
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Agent wants to ${pending.detail}",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        TextButton(onClick = { vm.decideApproval(false) }) { Text("Deny") }
+                        TextButton(onClick = { vm.decideApproval(true) }) { Text("Approve") }
+                    }
                 }
             }
             pendingAttachment?.let { attachment ->
