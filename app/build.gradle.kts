@@ -1,3 +1,7 @@
+import java.net.URI
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -13,12 +17,12 @@ val fetchInterFonts = tasks.register("fetchInterFonts") {
         val zipFile = layout.buildDirectory.file("inter/Inter-4.1.zip").get().asFile
         if (!zipFile.isFile) {
             zipFile.parentFile.mkdirs()
-            java.net.URI("https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip")
+            URI("https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip")
                 .toURL().openStream().use { input ->
                     zipFile.outputStream().use { output -> input.copyTo(output) }
                 }
         }
-        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val md = MessageDigest.getInstance("SHA-256")
         zipFile.inputStream().use { s ->
             val buf = ByteArray(1 shl 20)
             while (true) {
@@ -38,7 +42,7 @@ val fetchInterFonts = tasks.register("fetchInterFonts") {
             "extras/ttf/Inter-Bold.ttf" to "inter_bold.ttf",
         )
         val fontDir = File(interFontsDir.get().asFile, "font").apply { mkdirs() }
-        java.util.zip.ZipFile(zipFile).use { zip ->
+        ZipFile(zipFile).use { zip ->
             for ((entryName, outName) in wanted) {
                 val entry = zip.getEntry(entryName) ?: error("Missing $entryName in the Inter zip")
                 zip.getInputStream(entry).use { input ->
