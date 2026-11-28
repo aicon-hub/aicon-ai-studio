@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-28
+
+### Added
+- Agent mode (toggle in the chat top bar): the model can ask for list_files, read_file and write_file inside the user's share folder only. Every tool call waits for an explicit Approve or Deny, and the loop stops after three steps.
+- Files screen: the share folder the agent can see. Add files one by one through the picker, export or delete them.
+- Agent audit log (visible on the Files screen): every tool decision recorded as tool, status and path hash only. Arguments and file contents never enter the log.
+- Threat-model acceptance tests: audit lines cannot contain arguments or contents; the path policy refuses traversal, absolute paths and unpicked app-private files.
+
 ## [0.1.2] - 2026-11-28
 
 ### Added
