@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-28
+
+### Fixed
+- One fixed signing key for every build from now on (kept in GitHub Secrets, backed up in the vault). Every earlier build used a throwaway key, so Android refuses to update them in place: uninstall the old app once, then install v0.2.1. Builds from now on update over it normally.
+- Launcher icon proportions matched to the official AiCoN maskable icon so the C stays inside the adaptive mask.
+
+### Notes
+- The app icon and the header and drawer art are the official AiCoN mark and lockup from aicon-hub.github.io. v0.1.x builds shipped no icon of their own, so phones still on those builds show the Android default icon.
+
 ## [0.2.0] - 2026-11-28
 
 ### Added
