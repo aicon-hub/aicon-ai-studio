@@ -41,7 +41,18 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
+      - name: Decode signing keystore
+        run: |
+          if [ -n "$KSB64" ]; then echo "$KSB64" | base64 -d > "$RUNNER_TEMP/aicon-studio.keystore"; fi
+        env:
+          KSB64: ${{ secrets.AICON_SIGNING_KEYSTORE_B64 }}
+
       - name: Build
+        env:
+          AICON_STORE_FILE: ${{ runner.temp }}/aicon-studio.keystore
+          AICON_STORE_PASSWORD: ${{ secrets.AICON_SIGNING_STORE_PASSWORD }}
+          AICON_KEY_ALIAS: ${{ secrets.AICON_SIGNING_KEY_ALIAS }}
+          AICON_KEY_PASSWORD: ${{ secrets.AICON_SIGNING_STORE_PASSWORD }}
         run: gradle assembleDebug --no-daemon
 
       - name: Lint
