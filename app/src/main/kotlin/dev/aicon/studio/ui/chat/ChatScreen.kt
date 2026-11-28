@@ -218,6 +218,28 @@ fun ChatScreen(
                 }
             }
             ImpactStrip(context)
+            if (messages.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_aicon_mark),
+                        contentDescription = null,
+                        modifier = Modifier.height(56.dp),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Ask anything.", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Runs fully on this phone. No account, no cloud.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -309,6 +331,7 @@ fun ChatScreen(
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Message") },
                     maxLines = 4,
+                    shape = MaterialTheme.shapes.large,
                 )
                 Button(
                     onClick = {
