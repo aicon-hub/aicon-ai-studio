@@ -106,6 +106,29 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Display", style = MaterialTheme.typography.titleMedium)
+                Text("Layout density", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppSettings.densityChoices.forEach { (value, label) ->
+                        FilterChip(
+                            selected = AppSettings.densityScale == value,
+                            onClick = { AppSettings.setDensityScale(context, value) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Text("Text size", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppSettings.textScaleChoices.forEach { (value, label) ->
+                        FilterChip(
+                            selected = AppSettings.textScale == value,
+                            onClick = { AppSettings.setTextScale(context, value) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Speed", style = MaterialTheme.typography.titleMedium)
                 Text("Threads", style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
