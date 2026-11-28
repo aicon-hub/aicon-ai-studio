@@ -87,6 +87,7 @@ fun ChatScreen(
     val exportRequest by vm.exportRequest.collectAsStateWithLifecycle()
     val agentMode by vm.agentMode.collectAsStateWithLifecycle()
     val approval by vm.approval.collectAsStateWithLifecycle()
+    val liveSpeed by vm.liveSpeed.collectAsStateWithLifecycle()
 
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -232,6 +233,18 @@ fun ChatScreen(
                     )
                 }
             }
+            liveSpeed?.let { speed ->
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        speed,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
             approval?.let { pending ->
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -355,6 +368,15 @@ private fun Bubble(msg: ChatMessage, onSave: (() -> Unit)?) {
                         text = if (msg.streaming && msg.text.isEmpty()) "…" else msg.text,
                     )
                 }
+            }
+        }
+        msg.speedText?.let {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         if (onSave != null) {
