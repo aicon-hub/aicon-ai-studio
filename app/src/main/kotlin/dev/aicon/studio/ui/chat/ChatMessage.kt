@@ -8,4 +8,6 @@ data class ChatMessage(
     val streaming: Boolean = false,
     val attachmentName: String? = null,
     val imagePath: String? = null,
+    /** Measured reply speed, shown under the finished bubble. */
+    val speedText: String? = null,
 )
