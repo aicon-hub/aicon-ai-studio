@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import dev.aicon.studio.savings.Savings
 import dev.aicon.studio.settings.AppSettings
 
 /** Appearance and about. Changes apply immediately and persist. */
@@ -143,6 +144,25 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "Applies the next time a model loads.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Impact tracking", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Count on-device tokens, streaks and estimated savings",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "Fully local, estimates only. Off stops counting; totals stay until reset.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Switch(
+                        checked = Savings.enabled,
+                        onCheckedChange = { Savings.setEnabled(context, it) },
+                    )
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("About", style = MaterialTheme.typography.titleMedium)
