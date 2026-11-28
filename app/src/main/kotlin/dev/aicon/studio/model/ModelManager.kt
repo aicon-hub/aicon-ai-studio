@@ -85,6 +85,17 @@ object ModelManager {
 
     private class Canceled : Exception()
 
+    /** Maps raw network failures to messages that say what to do next. */
+    private fun friendlyError(e: Exception): String = when (e) {
+        is java.net.UnknownHostException ->
+            "No internet connection. Check your network and tap Download again."
+        is java.net.SocketTimeoutException ->
+            "The connection timed out. Check your network and tap Download again."
+        is java.net.ConnectException ->
+            "The server could not be reached. Try again in a moment."
+        else -> e.message ?: "Download failed"
+    }
+
     /** Streams one URL to [target] via a .part file and verifies its SHA-256. */
     private fun fetchOne(
         id: String,
@@ -174,7 +185,7 @@ object ModelManager {
             setState(info.id, DownloadState(
                 if (info.id in cancelRequested) Status.CANCELED else Status.FAILED,
                 0, grandTotal,
-                if (info.id in cancelRequested) null else (e.message ?: "Download failed"),
+                if (info.id in cancelRequested) null else friendlyError(e),
             ))
         } finally {
             cancelRequested.remove(info.id)
