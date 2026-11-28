@@ -1,6 +1,7 @@
 package dev.aicon.studio.ui.chat
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.aicon.studio.EngineHolder
@@ -57,6 +58,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** Live speed while a reply streams, e.g. "8.3 tok/s · 340 words/min". */
+    private val _liveSpeed = MutableStateFlow<String?>(null)
+    val liveSpeed: StateFlow<String?> = _liveSpeed.asStateFlow()
 
     private val _sessions = MutableStateFlow<List<ChatSessionMeta>>(emptyList())
     val sessions: StateFlow<List<ChatSessionMeta>> = _sessions.asStateFlow()
@@ -217,19 +222,38 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _busy.value = true
             _error.value = null
+            _liveSpeed.value = null
+            var words = 0
+            val startedAt = SystemClock.elapsedRealtime()
             val history = _messages.value
                 .filter { !it.streaming }
                 .map { ChatTurn(if (it.fromUser) Role.USER else Role.ASSISTANT, it.text) }
             try {
-                EngineHolder.engine(getApplication())
+                val engine = EngineHolder.engine(getApplication())
+                engine
                     .generate(enginePrompt(prompt, attachment), history, imagePath)
                     .collect { token ->
+                        words += token.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
                         _messages.update { list ->
                             list.map { if (it.id == replyId) it.copy(text = it.text + token) else it }
                         }
+                        val elapsedSec = (SystemClock.elapsedRealtime() - startedAt) / 1000.0
+                        val tps = engine.stats().decodeTokPerSec
+                        if (tps > 0 && elapsedSec > 0.5 && words > 0) {
+                            _liveSpeed.value = speedText(tps, words, elapsedSec)
+                        }
                     }
+                val elapsedSec = (SystemClock.elapsedRealtime() - startedAt) / 1000.0
+                val stats = engine.stats()
+                val caption = when {
+                    stats.generatedTokens <= 0 -> null
+                    stats.decodeTokPerSec > 0 && words > 0 ->
+                        speedText(stats.decodeTokPerSec, words, elapsedSec) +
+                            " · " + stats.generatedTokens + " tokens"
+                    else -> stats.generatedTokens.toString() + " tokens"
+                }
                 _messages.update { list ->
-                    list.map { if (it.id == replyId) it.copy(streaming = false) else it }
+                    list.map { if (it.id == replyId) it.copy(streaming = false, speedText = caption) else it }
                 }
                 persist()
             } catch (e: EngineException) {
@@ -237,6 +261,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _messages.update { list -> list.filterNot { it.id == replyId } }
             } finally {
                 _busy.value = false
+                _liveSpeed.value = null
             }
         }
     }
@@ -295,6 +320,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearError() {
         _error.value = null
+    }
+
+    private fun speedText(tps: Double, words: Int, elapsedSec: Double): String {
+        val wpm = if (elapsedSec > 0) words / elapsedSec * 60 else 0.0
+        return String.format("%.1f tok/s · %.0f words/min", tps, wpm)
     }
 
     private fun persist() {
