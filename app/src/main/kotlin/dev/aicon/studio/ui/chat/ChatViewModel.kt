@@ -14,6 +14,7 @@ import dev.aicon.studio.chat.StoredMessage
 import dev.aicon.studio.engine.ChatTurn
 import dev.aicon.studio.engine.EngineException
 import dev.aicon.studio.model.ModelStats
+import dev.aicon.studio.savings.Savings
 import dev.aicon.studio.engine.Role
 import dev.aicon.studio.engine.agent.ToolCallParser
 import kotlinx.coroutines.CompletableDeferred
@@ -266,6 +267,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             stats.generatedTokens,
                         )
                     }
+                Savings.record(getApplication(), stats.generatedTokens)
                 persist()
             } catch (e: EngineException) {
                 _error.value = e.message
