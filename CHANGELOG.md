@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-28
+
+### Added
+- The project is now licensed under the Apache License 2.0 (LICENSE file, copyright AiCoN).
+- A third-party licenses page in Settings > About: app license, llama.cpp (MIT), Jetpack Compose and AndroidX (Apache-2.0), Kotlin (Apache-2.0), Inter (SIL OFL 1.1), and a note that models carry their own licenses as shown on each card.
+
 ## [0.3.1] - 2026-11-28
 
 ### Added
