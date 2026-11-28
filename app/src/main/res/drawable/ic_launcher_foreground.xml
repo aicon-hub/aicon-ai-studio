@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- AiCoN AI Studio iris mark (brand/mark-aperture.svg, the picked logo), scaled to stay inside the adaptive safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="0.102" android:scaleY="0.102"
-        android:translateX="3" android:translateY="3">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M511.25 810.5Q370.84999999999997 810.5 285.34999999999997 725.45Q199.84999999999997 640.4 199.84999999999997 500.0Q199.84999999999997 359.59999999999997 285.34999999999997 274.54999999999995Q370.84999999999997 189.5 511.25 189.5Q639.95 189.5 720.0500000000001 252.95Q800.1500000000001 316.4 800.1500000000001 423.5V436.09999999999997H693.05V423.5Q693.05 282.19999999999993 512.15 282.19999999999993Q405.94999999999993 282.19999999999993 354.19999999999993 334.84999999999997Q302.44999999999993 387.5 302.44999999999993 500.0Q302.44999999999993 611.6 353.74999999999994 664.25Q405.04999999999995 716.9 512.15 716.9Q693.05 716.9 693.05 575.6V563.9H800.1500000000001V575.6Q800.1500000000001 683.6 720.5 747.05Q640.8499999999999 810.5 511.25 810.5Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M438,500 a62,62 0 1 1 124,0 a62,62 0 1 1 -124,0 Z" />
+    <group android:scaleX="0.9504" android:scaleY="0.9504" android:translateX="6.48" android:translateY="6.48">
+        <path android:pathData="M65,50 L75.27,72.75" android:strokeColor="#9D7BFF" android:strokeWidth="8.5" android:strokeLineCap="round" />
+        <path android:pathData="M57.5,62.99 L42.93,83.26" android:strokeColor="#9271FF" android:strokeWidth="8.5" android:strokeLineCap="round" />
+        <path android:pathData="M42.5,62.99 L17.66,60.51" android:strokeColor="#8868FF" android:strokeWidth="8.5" android:strokeLineCap="round" />
+        <path android:pathData="M35,50 L24.73,27.25" android:strokeColor="#7E5FFF" android:strokeWidth="8.5" android:strokeLineCap="round" />
+        <path android:pathData="M42.5,37.01 L57.07,16.74" android:strokeColor="#7456FF" android:strokeWidth="8.5" android:strokeLineCap="round" />
+        <path android:pathData="M57.5,37.01 L82.34,39.49" android:strokeColor="#6A4DFF" android:strokeWidth="8.5" android:strokeLineCap="round" />
     </group>
 </vector>
