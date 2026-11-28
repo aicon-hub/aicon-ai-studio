@@ -17,7 +17,8 @@ import java.net.URL
  * Downloads catalog models into app-private storage. Downloads start only
  * from a user tap (network policy), stream to a .part file, and become
  * visible to the engine after the SHA-256 check passes. A failed check
- * deletes the file.
+ * deletes the file. Vision models download their mmproj adapter the same
+ * way, as a second verified file.
  */
 object ModelManager {
 
@@ -52,9 +53,17 @@ object ModelManager {
         return if (f.isFile && f.length() == info.sizeBytes) f else null
     }
 
-    fun isInstalled(info: ModelInfo): Boolean = installedFile(info) != null
+    fun mmprojFile(info: ModelInfo): File? {
+        val m = info.mmproj ?: return null
+        val f = File(modelDir(info), m.fileName)
+        return if (f.isFile && f.length() == m.sizeBytes) f else null
+    }
+
+    fun isInstalled(info: ModelInfo): Boolean =
+        installedFile(info) != null && (info.mmproj == null || mmprojFile(info) != null)
 
     fun download(info: ModelInfo) {
+        if (!info.downloadable) return
         if (_downloads.value[info.id]?.status == Status.DOWNLOADING) return
         cancelRequested.remove(info.id)
         scope.launch { runDownload(info) }
@@ -74,67 +83,101 @@ object ModelManager {
         _downloads.value = _downloads.value + (id to state)
     }
 
-    private fun runDownload(info: ModelInfo) {
-        val dir = modelDir(info)
-        dir.mkdirs()
-        val part = File(dir, info.fileName + ".part")
-        val target = File(dir, info.fileName)
+    private class Canceled : Exception()
+
+    /** Streams one URL to [target] via a .part file and verifies its SHA-256. */
+    private fun fetchOne(
+        id: String,
+        url: String,
+        sha256: String,
+        target: File,
+        baseDone: Long,
+        grandTotal: Long,
+    ) {
+        val part = File(target.parentFile, target.name + ".part")
         var connection: HttpURLConnection? = null
         try {
-            connection = (URL(info.downloadUrl).openConnection() as HttpURLConnection).apply {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout = 30_000
                 instanceFollowRedirects = true
             }
-            val total = connection.contentLengthLong.takeIf { it > 0 } ?: info.sizeBytes
             connection.inputStream.use { input ->
                 FileOutputStream(part).use { output ->
                     val buffer = ByteArray(256 * 1024)
                     var done = 0L
                     var lastReported = -1L
                     while (true) {
-                        if (info.id in cancelRequested) {
-                            part.delete()
-                            setState(info.id, DownloadState(Status.CANCELED, done, total))
-                            return
-                        }
+                        if (id in cancelRequested) throw Canceled()
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
                         done += read
-                        if (done - lastReported >= 4L * 1024 * 1024 || done == total) {
+                        if (done - lastReported >= 4L * 1024 * 1024) {
                             lastReported = done
-                            setState(info.id, DownloadState(Status.DOWNLOADING, done, total))
+                            setState(id, DownloadState(Status.DOWNLOADING, baseDone + done, grandTotal))
                         }
                     }
+                    setState(id, DownloadState(Status.DOWNLOADING, baseDone + done, grandTotal))
                 }
             }
-            setState(info.id, DownloadState(Status.VERIFYING, info.sizeBytes, info.sizeBytes))
-            if (!Sha256.matches(part, info.sha256)) {
+            setState(id, DownloadState(Status.VERIFYING, baseDone + part.length(), grandTotal))
+            if (!Sha256.matches(part, sha256)) {
                 part.delete()
-                setState(info.id, DownloadState(Status.FAILED, 0, info.sizeBytes,
+                setState(id, DownloadState(Status.FAILED, 0, grandTotal,
                     "Integrity check failed. The file was deleted."))
-                return
+                throw Canceled()
             }
             if (target.exists()) target.delete()
             if (!part.renameTo(target)) {
                 part.delete()
-                setState(info.id, DownloadState(Status.FAILED, 0, info.sizeBytes,
+                setState(id, DownloadState(Status.FAILED, 0, grandTotal,
                     "Could not finalize the file."))
-                return
+                throw Canceled()
             }
-            setState(info.id, DownloadState(Status.DONE, info.sizeBytes, info.sizeBytes))
-        } catch (e: Exception) {
+        } finally {
             part.delete()
-            val canceled = info.id in cancelRequested
+            connection?.disconnect()
+        }
+    }
+
+    private fun runDownload(info: ModelInfo) {
+        val dir = modelDir(info)
+        dir.mkdirs()
+        val grandTotal = info.sizeBytes + (info.mmproj?.sizeBytes ?: 0L)
+        try {
+            fetchOne(
+                id = info.id,
+                url = info.downloadUrl!!,
+                sha256 = info.sha256!!,
+                target = File(dir, info.fileName),
+                baseDone = 0L,
+                grandTotal = grandTotal,
+            )
+            info.mmproj?.let { m ->
+                fetchOne(
+                    id = info.id,
+                    url = m.downloadUrl,
+                    sha256 = m.sha256,
+                    target = File(dir, m.fileName),
+                    baseDone = info.sizeBytes,
+                    grandTotal = grandTotal,
+                )
+            }
+            setState(info.id, DownloadState(Status.DONE, grandTotal, grandTotal))
+        } catch (e: Canceled) {
+            if (info.id in cancelRequested) {
+                setState(info.id, DownloadState(Status.CANCELED))
+            }
+            // A failed verify/finalize already set FAILED; leave it.
+        } catch (e: Exception) {
             setState(info.id, DownloadState(
-                if (canceled) Status.CANCELED else Status.FAILED,
-                0, info.sizeBytes,
-                if (canceled) null else (e.message ?: "Download failed"),
+                if (info.id in cancelRequested) Status.CANCELED else Status.FAILED,
+                0, grandTotal,
+                if (info.id in cancelRequested) null else (e.message ?: "Download failed"),
             ))
         } finally {
             cancelRequested.remove(info.id)
-            connection?.disconnect()
         }
     }
 }
