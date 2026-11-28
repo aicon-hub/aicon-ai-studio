@@ -20,6 +20,9 @@ object EngineHolder {
     private val _loadedModelPath = MutableStateFlow<String?>(null)
     val loadedModelPath: StateFlow<String?> = _loadedModelPath.asStateFlow()
 
+    private val _visionReady = MutableStateFlow(false)
+    val visionReady: StateFlow<Boolean> = _visionReady.asStateFlow()
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
@@ -29,7 +32,12 @@ object EngineHolder {
     fun engine(context: Context): LlamaCppEngine =
         engineInstance ?: LlamaCppEngine(context.applicationContext).also { engineInstance = it }
 
-    suspend fun loadModel(context: Context, path: String, templateAsset: String?) {
+    suspend fun loadModel(
+        context: Context,
+        path: String,
+        templateAsset: String?,
+        mmprojPath: String? = null,
+    ) {
         _loading.value = true
         _loadError.value = null
         try {
@@ -39,9 +47,11 @@ object EngineHolder {
                 }
                 val engine = engine(context)
                 engine.setChatTemplate(template)
+                engine.setMmproj(mmprojPath)
                 engine.load(path)
             }
             _loadedModelPath.value = path
+            _visionReady.value = mmprojPath != null && engine(context).hasVision()
         } catch (e: EngineException) {
             _loadError.value = e.message
         } finally {
@@ -52,9 +62,12 @@ object EngineHolder {
     suspend fun unload() {
         withContext(Dispatchers.Default) { engineInstance?.unload() }
         _loadedModelPath.value = null
+        _visionReady.value = false
     }
 
     fun isLoaded(): Boolean = engineInstance?.isLoaded() == true
+
+    fun hasVision(): Boolean = engineInstance?.let { it.isLoaded() && it.hasVision() } == true
 
     fun clearError() {
         _loadError.value = null
