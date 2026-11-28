@@ -12,6 +12,7 @@ plugins {
 // provenance is verifiable.
 val interFontsDir = layout.buildDirectory.dir("generated/res/inter")
 val fetchInterFonts = tasks.register("fetchInterFonts") {
+    notCompatibleWithConfigurationCache("downloads and hash-checks the Inter zip with script-local state")
     outputs.dir(interFontsDir)
     doLast {
         val zipFile = layout.buildDirectory.file("inter/Inter-4.1.zip").get().asFile
