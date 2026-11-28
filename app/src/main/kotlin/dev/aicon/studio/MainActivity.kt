@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppSettings.load(this)
+        dev.aicon.studio.savings.Savings.load(this)
         ModelManager.init(this)
         enableEdgeToEdge()
         setContent {
