@@ -48,10 +48,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import dev.aicon.studio.ui.theme.BrandIris
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -62,7 +66,7 @@ import java.io.FileOutputStream
 private const val MAX_ATTACH_CHARS = 8000
 
 /**
- * The chat screen. Original AiCoN AI Studio design: AiCoN orange accents,
+ * The chat screen. Original AiCoN AI Studio design: iris brand accents,
  * rounded bubbles, sessions in the drawer, model management on the Models
  * screen. With a vision model loaded, one photo can ride along per message.
  */
@@ -151,8 +155,6 @@ fun ChatScreen(
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
-    val darkHeader = MaterialTheme.colorScheme.background.luminance() < 0.5f
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -164,15 +166,19 @@ fun ChatScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
-                            painter = painterResource(
-                                if (darkHeader) R.drawable.ic_aicon_lockup_light
-                                else R.drawable.ic_aicon_lockup_dark,
-                            ),
-                            contentDescription = "AiCoN",
+                            painter = painterResource(R.drawable.ic_aicon_mark),
+                            contentDescription = null,
                             modifier = Modifier.height(24.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("AI Studio", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            buildAnnotatedString {
+                                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("AiCoN ") }
+                                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = BrandIris)) { append("AI") }
+                                append(" Studio")
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
                 },
                 actions = {
