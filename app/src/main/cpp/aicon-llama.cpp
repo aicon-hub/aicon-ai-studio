@@ -1,11 +1,13 @@
 // JNI bridge between LlamaCppEngine (Kotlin) and llama.cpp.
 // Completion-loop logic adapted from llama.cpp's examples/llama.android
-// ai_chat.cpp (MIT license, (c) the ggml authors), renamed and trimmed to
-// what AiCoN AI Studio's chat screen needs.
+// ai_chat.cpp and the image flow from tools/mtmd/mtmd-cli.cpp (both MIT
+// license, (c) the ggml authors), renamed and trimmed to what AiCoN AI
+// Studio's chat screen needs.
 #include <android/log.h>
 #include <jni.h>
 #include <string>
 #include <sstream>
+#include <vector>
 #include <unistd.h>
 #include <sampling.h>
 
@@ -13,6 +15,8 @@
 #include "chat.h"
 #include "common.h"
 #include "llama.h"
+#include "mtmd.h"
+#include "mtmd-helper.h"
 
 constexpr int   N_THREADS_MIN           = 2;
 constexpr int   N_THREADS_MAX           = 4;
@@ -29,6 +33,12 @@ static common_batch                  g_batch;
 static common_chat_templates_ptr     g_chat_templates;
 static common_sampler              * g_sampler;
 static std::string                   g_chat_template_override;
+static mtmd_context                * g_mtmd = nullptr;
+
+static int best_thread_count() {
+    return std::max(N_THREADS_MIN, std::min(N_THREADS_MAX,
+                        (int) sysconf(_SC_NPROCESSORS_ONLN) - N_THREADS_HEADROOM));
+}
 
 extern "C"
 JNIEXPORT void JNICALL
@@ -67,9 +77,7 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
         return nullptr;
     }
 
-    const int n_threads = std::max(N_THREADS_MIN, std::min(N_THREADS_MAX,
-                                                     (int) sysconf(_SC_NPROCESSORS_ONLN) -
-                                                     N_THREADS_HEADROOM));
+    const int n_threads = best_thread_count();
     LOGi("%s: using %d threads", __func__, n_threads);
 
     llama_context_params ctx_params = llama_context_default_params();
@@ -97,6 +105,44 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativePrepare(JNIEnv * /*en
     sparams.temp = DEFAULT_SAMPLER_TEMP;
     g_sampler = common_sampler_init(g_model, sparams);
     return 0;
+}
+
+// Load the mmproj vision adapter for multimodal models (SmolVLM2 and
+// friends). Requires the text model to be loaded first.
+// Returns 0 on success, 1 when no model is loaded, 2 when the adapter file
+// failed to load, 3 when it exposes no vision capability.
+extern "C"
+JNIEXPORT jint JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeLoadMmproj(JNIEnv *env, jobject, jstring jmmproj_path) {
+    if (!g_model) {
+        return 1;
+    }
+    mtmd_context_params mparams = mtmd_context_params_default();
+    mparams.use_gpu = false;
+    mparams.print_timings = false;
+    mparams.n_threads = best_thread_count();
+    mparams.media_marker = mtmd_default_marker();
+
+    const auto *mmproj_path = env->GetStringUTFChars(jmmproj_path, 0);
+    LOGd("%s: loading mmproj from: %s", __func__, mmproj_path);
+    auto *mctx = mtmd_init_from_file(mmproj_path, g_model, mparams);
+    env->ReleaseStringUTFChars(jmmproj_path, mmproj_path);
+    if (!mctx) {
+        return 2;
+    }
+    if (!mtmd_support_vision(mctx)) {
+        mtmd_free(mctx);
+        return 3;
+    }
+    g_mtmd = mctx;
+    LOGi("mmproj loaded; vision ready.");
+    return 0;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeHasVision(JNIEnv * /*env*/, jobject /*unused*/) {
+    return (g_mtmd != nullptr && mtmd_support_vision(g_mtmd)) ? JNI_TRUE : JNI_FALSE;
 }
 
 // Completion loop state
@@ -274,6 +320,118 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPrompt(
   }
 }
 
+// Process a user prompt that carries one image. The prompt text is wrapped
+// in the chat template with the mtmd media marker, the formatted string is
+// split on the marker, and text segments interleaved with the bitmap are
+// tokenized and evaluated through mtmd (mirrors mtmd-cli.cpp's flow).
+// Returns 0 on success; 1 no vision adapter, 2 image unreadable,
+// 3 tokenize failed, 4 image does not fit the remaining context,
+// 5 evaluation failed, 6 unexpected error.
+extern "C"
+JNIEXPORT jint JNICALL
+Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeProcessUserPromptWithImage(
+        JNIEnv *env,
+        jobject /*unused*/,
+        jstring juser_prompt,
+        jstring jimage_path,
+        jint n_predict
+) {
+  try {
+    if (g_mtmd == nullptr) {
+        return 1;
+    }
+    reset_short_term_states();
+
+    const auto *user_prompt = env->GetStringUTFChars(juser_prompt, nullptr);
+    const std::string marker = mtmd_default_marker();
+    std::string content = marker + "\n" + user_prompt;
+    env->ReleaseStringUTFChars(juser_prompt, user_prompt);
+
+    const bool has_chat_template = common_chat_templates_was_explicit(g_chat_templates.get());
+    const bool add_bos = chat_msgs.empty();
+    std::string formatted;
+    if (has_chat_template) {
+        formatted = chat_add_and_format(ROLE_USER, content);
+    } else {
+        formatted = content;
+    }
+
+    const auto *image_path = env->GetStringUTFChars(jimage_path, nullptr);
+    auto opt = mtmd_helper_init_opt_default();
+    auto bw = mtmd_helper_bitmap_init_from_file(g_mtmd, image_path, false, opt);
+    env->ReleaseStringUTFChars(jimage_path, image_path);
+    if (!bw.bitmap) {
+        LOGe("%s: could not decode image", __func__);
+        return 2;
+    }
+
+    // Split the formatted prompt on the media marker; exactly one image is
+    // supported here, so exactly two segments are expected.
+    std::vector<std::string> segments;
+    size_t start = 0;
+    size_t pos;
+    while ((pos = formatted.find(marker, start)) != std::string::npos) {
+        segments.push_back(formatted.substr(start, pos - start));
+        start = pos + marker.size();
+    }
+    segments.push_back(formatted.substr(start));
+    if (segments.size() != 2) {
+        LOGe("%s: media marker count mismatch (%zu segments)", __func__, segments.size());
+        mtmd_bitmap_free(bw.bitmap);
+        return 3;
+    }
+
+    std::vector<mtmd_input_text> texts(segments.size());
+    std::vector<mtmd_input_part> parts;
+    std::vector<const mtmd_input_part *> parts_ptr;
+    for (size_t i = 0; i < segments.size(); i++) {
+        texts[i] = { segments[i].data(), segments[i].size(), /* add_special */ false, /* parse_special */ true };
+        parts.push_back({ &texts[i], nullptr });
+        if (i == 0) {
+            parts.push_back({ nullptr, bw.bitmap });
+        }
+    }
+    for (auto &p : parts) {
+        parts_ptr.push_back(&p);
+    }
+
+    mtmd_input_chunks *chunks = mtmd_input_chunks_init();
+    int32_t res = mtmd_tokenize_from_parts(g_mtmd, chunks, parts_ptr.data(), parts_ptr.size(), add_bos);
+    if (res != 0) {
+        LOGe("%s: mtmd_tokenize_from_parts failed w/ %d", __func__, res);
+        mtmd_input_chunks_free(chunks);
+        mtmd_bitmap_free(bw.bitmap);
+        return 3;
+    }
+
+    const llama_pos n_pos = mtmd_helper_get_n_pos(chunks);
+    if (current_position + n_pos > DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
+        LOGw("%s: image+prompt needs %d positions, only %d left", __func__,
+             (int) n_pos, (int) (DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM - current_position));
+        mtmd_input_chunks_free(chunks);
+        mtmd_bitmap_free(bw.bitmap);
+        return 4;
+    }
+
+    llama_pos new_n_past = current_position;
+    res = mtmd_helper_eval_chunks(g_mtmd, g_context, chunks, current_position, 0,
+                                  BATCH_SIZE, /* logits_last */ true, &new_n_past);
+    mtmd_input_chunks_free(chunks);
+    mtmd_bitmap_free(bw.bitmap);
+    if (res != 0) {
+        LOGe("%s: mtmd_helper_eval_chunks failed w/ %d", __func__, res);
+        return 5;
+    }
+
+    current_position = new_n_past;
+    stop_generation_position = current_position + n_predict;
+    return 0;
+  } catch (const std::exception &e) {
+    LOGe("%s: %s", __func__, e.what());
+    return 6;
+  }
+}
+
 static bool is_valid_utf8(const char *string) {
     if (!string) { return true; }
 
@@ -359,6 +517,10 @@ Java_dev_aicon_studio_engine_llamacpp_LlamaCppEngine_nativeUnload(JNIEnv * /*unu
     common_sampler_free(g_sampler);
     g_chat_templates.reset();
     g_batch = common_batch();
+    if (g_mtmd != nullptr) {
+        mtmd_free(g_mtmd);
+        g_mtmd = nullptr;
+    }
     llama_free(g_context);
     llama_model_free(g_model);
     g_chat_template_override.clear();
