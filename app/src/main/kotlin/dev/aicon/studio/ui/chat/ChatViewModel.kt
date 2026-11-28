@@ -34,7 +34,8 @@ data class ToolApproval(val id: Long, val tool: String, val detail: String)
  * Holds the conversation and drives the shared engine. Sessions persist as
  * JSON files through ChatStore; the engine itself lives in EngineHolder so
  * the Models screen can load and unload too. Agent mode routes prompts
- * through AgentRunner, where every tool call waits for approval.
+ * through AgentRunner, where every tool call waits for approval. When a
+ * vision model is loaded, one photo can ride along with a message.
  */
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -49,6 +50,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
     val modelPath: StateFlow<String?> = EngineHolder.loadedModelPath
+    val visionReady: StateFlow<Boolean> = EngineHolder.visionReady
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -64,6 +66,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _pendingAttachment = MutableStateFlow<PendingAttachment?>(null)
     val pendingAttachment: StateFlow<PendingAttachment?> = _pendingAttachment.asStateFlow()
+
+    private val _pendingImage = MutableStateFlow<String?>(null)
+    val pendingImage: StateFlow<String?> = _pendingImage.asStateFlow()
 
     private val _exportRequest = MutableStateFlow<ExportRequest?>(null)
     val exportRequest: StateFlow<ExportRequest?> = _exportRequest.asStateFlow()
@@ -92,6 +97,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _currentSession.value = store.newSessionMeta()
         _messages.value = emptyList()
         _pendingAttachment.value = null
+        _pendingImage.value = null
     }
 
     fun openSession(id: String) {
@@ -123,6 +129,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _pendingAttachment.value = null
     }
 
+    /** Stage an image (copied into app storage by the caller) for the next message. */
+    fun setPendingImage(path: String) {
+        if (!EngineHolder.hasVision()) {
+            _error.value = "This model cannot see images. Load a vision model from the Models screen."
+            return
+        }
+        _pendingImage.value = path
+    }
+
+    fun clearPendingImage() {
+        _pendingImage.value = null
+    }
+
     fun setAgentMode(on: Boolean) {
         _agentMode.value = on
     }
@@ -152,16 +171,34 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         val attachment = _pendingAttachment.value
         _pendingAttachment.value = null
+        val image = _pendingImage.value
+        _pendingImage.value = null
+        if (image != null) {
+            if (_agentMode.value) {
+                _error.value = "Agent mode cannot use images yet. Turn Agent off to send a photo."
+                return
+            }
+            if (!EngineHolder.hasVision()) {
+                _error.value = "This model cannot see images. Load a vision model from the Models screen."
+                return
+            }
+        }
         if (_agentMode.value) {
             sendAgent(prompt, attachment)
         } else {
-            sendChat(prompt, attachment)
+            sendChat(prompt, attachment, image)
         }
     }
 
-    private fun addUserMessage(prompt: String, attachment: PendingAttachment?) {
+    private fun addUserMessage(prompt: String, attachment: PendingAttachment?, imagePath: String? = null) {
         _messages.update {
-            it + ChatMessage(nextId++, fromUser = true, text = prompt, attachmentName = attachment?.name)
+            it + ChatMessage(
+                nextId++,
+                fromUser = true,
+                text = prompt,
+                attachmentName = attachment?.name ?: imagePath?.substringAfterLast('/'),
+                imagePath = imagePath,
+            )
         }
     }
 
@@ -172,8 +209,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             prompt
         }
 
-    private fun sendChat(prompt: String, attachment: PendingAttachment?) {
-        addUserMessage(prompt, attachment)
+    private fun sendChat(prompt: String, attachment: PendingAttachment?, imagePath: String? = null) {
+        addUserMessage(prompt, attachment, imagePath)
         val replyId = nextId++
         _messages.update { it + ChatMessage(replyId, fromUser = false, text = "", streaming = true) }
 
@@ -185,7 +222,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 .map { ChatTurn(if (it.fromUser) Role.USER else Role.ASSISTANT, it.text) }
             try {
                 EngineHolder.engine(getApplication())
-                    .generate(enginePrompt(prompt, attachment), history)
+                    .generate(enginePrompt(prompt, attachment), history, imagePath)
                     .collect { token ->
                         _messages.update { list ->
                             list.map { if (it.id == replyId) it.copy(text = it.text + token) else it }
