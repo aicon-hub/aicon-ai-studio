@@ -4,12 +4,17 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.aicon.studio.EngineHolder
+import dev.aicon.studio.agent.AgentRunner
+import dev.aicon.studio.agent.AuditStore
+import dev.aicon.studio.agent.FileGateway
 import dev.aicon.studio.chat.ChatSessionMeta
 import dev.aicon.studio.chat.ChatStore
 import dev.aicon.studio.chat.StoredMessage
 import dev.aicon.studio.engine.ChatTurn
 import dev.aicon.studio.engine.EngineException
 import dev.aicon.studio.engine.Role
+import dev.aicon.studio.engine.agent.ToolCallParser
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,14 +27,23 @@ data class PendingAttachment(val name: String, val text: String)
 /** A reply the user chose to save through the system file picker. */
 data class ExportRequest(val suggestedName: String, val text: String)
 
+/** A tool call waiting for the user's decision. */
+data class ToolApproval(val id: Long, val tool: String, val detail: String)
+
 /**
  * Holds the conversation and drives the shared engine. Sessions persist as
  * JSON files through ChatStore; the engine itself lives in EngineHolder so
- * the Models screen can load and unload too.
+ * the Models screen can load and unload too. Agent mode routes prompts
+ * through AgentRunner, where every tool call waits for approval.
  */
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = ChatStore(app.applicationContext)
+    private val runner = AgentRunner(
+        EngineHolder.engine(app.applicationContext),
+        FileGateway(app.applicationContext),
+        AuditStore(app.applicationContext),
+    )
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -53,6 +67,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _exportRequest = MutableStateFlow<ExportRequest?>(null)
     val exportRequest: StateFlow<ExportRequest?> = _exportRequest.asStateFlow()
+
+    private val _agentMode = MutableStateFlow(false)
+    val agentMode: StateFlow<Boolean> = _agentMode.asStateFlow()
+
+    private val _approval = MutableStateFlow<ToolApproval?>(null)
+    val approval: StateFlow<ToolApproval?> = _approval.asStateFlow()
+
+    private var approvalDeferred: CompletableDeferred<Boolean>? = null
 
     private var nextId = 1L
 
@@ -101,6 +123,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _pendingAttachment.value = null
     }
 
+    fun setAgentMode(on: Boolean) {
+        _agentMode.value = on
+    }
+
+    fun decideApproval(allow: Boolean) {
+        approvalDeferred?.complete(allow)
+        approvalDeferred = null
+        _approval.value = null
+    }
+
     fun requestExport(messageId: Long) {
         val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
         if (msg.fromUser || msg.streaming || msg.text.isBlank()) return
@@ -119,18 +151,31 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val attachment = _pendingAttachment.value
-        val userMsg = ChatMessage(
-            nextId++, fromUser = true, text = prompt, attachmentName = attachment?.name,
-        )
-        val replyId = nextId++
-        _messages.update { it + userMsg + ChatMessage(replyId, fromUser = false, text = "", streaming = true) }
         _pendingAttachment.value = null
+        if (_agentMode.value) {
+            sendAgent(prompt, attachment)
+        } else {
+            sendChat(prompt, attachment)
+        }
+    }
 
-        val enginePrompt = if (attachment != null) {
+    private fun addUserMessage(prompt: String, attachment: PendingAttachment?) {
+        _messages.update {
+            it + ChatMessage(nextId++, fromUser = true, text = prompt, attachmentName = attachment?.name)
+        }
+    }
+
+    private fun enginePrompt(prompt: String, attachment: PendingAttachment?): String =
+        if (attachment != null) {
             "File \"${attachment.name}\":\n" + attachment.text + "\n\n" + prompt
         } else {
             prompt
         }
+
+    private fun sendChat(prompt: String, attachment: PendingAttachment?) {
+        addUserMessage(prompt, attachment)
+        val replyId = nextId++
+        _messages.update { it + ChatMessage(replyId, fromUser = false, text = "", streaming = true) }
 
         viewModelScope.launch {
             _busy.value = true
@@ -139,11 +184,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 .filter { !it.streaming }
                 .map { ChatTurn(if (it.fromUser) Role.USER else Role.ASSISTANT, it.text) }
             try {
-                EngineHolder.engine(getApplication()).generate(enginePrompt, history).collect { token ->
-                    _messages.update { list ->
-                        list.map { if (it.id == replyId) it.copy(text = it.text + token) else it }
+                EngineHolder.engine(getApplication())
+                    .generate(enginePrompt(prompt, attachment), history)
+                    .collect { token ->
+                        _messages.update { list ->
+                            list.map { if (it.id == replyId) it.copy(text = it.text + token) else it }
+                        }
                     }
-                }
                 _messages.update { list ->
                     list.map { if (it.id == replyId) it.copy(streaming = false) else it }
                 }
@@ -154,6 +201,58 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 _busy.value = false
             }
+        }
+    }
+
+    private fun sendAgent(prompt: String, attachment: PendingAttachment?) {
+        addUserMessage(prompt, attachment)
+        viewModelScope.launch {
+            _busy.value = true
+            _error.value = null
+            try {
+                runner.run(
+                    goal = enginePrompt(prompt, attachment),
+                    requestApproval = { call -> awaitApproval(call) },
+                    onEvent = { event -> onAgentEvent(event) },
+                )
+                persist()
+            } catch (e: EngineException) {
+                _error.value = e.message
+            } finally {
+                _busy.value = false
+                _approval.value = null
+                approvalDeferred = null
+            }
+        }
+    }
+
+    private suspend fun awaitApproval(call: ToolCallParser.Call): Boolean {
+        val deferred = CompletableDeferred<Boolean>()
+        approvalDeferred = deferred
+        _approval.value = ToolApproval(nextId++, call.name, AgentRunner.describe(call))
+        return deferred.await()
+    }
+
+    private fun onAgentEvent(event: AgentRunner.Event) {
+        when (event) {
+            is AgentRunner.Event.Reply ->
+                _messages.update { it + ChatMessage(nextId++, fromUser = false, text = event.text) }
+            is AgentRunner.Event.ToolDone ->
+                _messages.update {
+                    it + ChatMessage(
+                        nextId++,
+                        fromUser = false,
+                        text = "Agent: ${event.detail} (${event.status})",
+                    )
+                }
+            AgentRunner.Event.RoundLimit ->
+                _messages.update {
+                    it + ChatMessage(
+                        nextId++,
+                        fromUser = false,
+                        text = "Agent stopped after the step limit. Ask it to continue if needed.",
+                    )
+                }
         }
     }
 
