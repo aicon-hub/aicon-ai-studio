@@ -41,12 +41,13 @@ import dev.aicon.studio.model.ModelManager
 import dev.aicon.studio.settings.AppSettings
 import dev.aicon.studio.ui.chat.ChatScreen
 import dev.aicon.studio.ui.chat.ChatViewModel
+import dev.aicon.studio.ui.files.FilesScreen
 import dev.aicon.studio.ui.models.ModelsScreen
 import dev.aicon.studio.ui.settings.SettingsScreen
 import dev.aicon.studio.ui.theme.AiCoNStudioTheme
 import kotlinx.coroutines.launch
 
-private enum class AppScreen { CHAT, MODELS, SETTINGS }
+private enum class AppScreen { CHAT, MODELS, FILES, SETTINGS }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +87,10 @@ private fun AppRoot() {
                         screenName = AppScreen.MODELS.name
                         closeDrawer()
                     },
+                    onOpenFiles = {
+                        screenName = AppScreen.FILES.name
+                        closeDrawer()
+                    },
                     onOpenSettings = {
                         screenName = AppScreen.SETTINGS.name
                         closeDrawer()
@@ -102,6 +107,7 @@ private fun AppRoot() {
                 onOpenModels = { screenName = AppScreen.MODELS.name },
             )
             AppScreen.MODELS -> ModelsScreen(onBack = { screenName = AppScreen.CHAT.name })
+            AppScreen.FILES -> FilesScreen(onBack = { screenName = AppScreen.CHAT.name })
             AppScreen.SETTINGS -> SettingsScreen(onBack = { screenName = AppScreen.CHAT.name })
         }
     }
@@ -111,6 +117,7 @@ private fun AppRoot() {
 private fun DrawerContent(
     chatVm: ChatViewModel,
     onOpenModels: () -> Unit,
+    onOpenFiles: () -> Unit,
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -159,6 +166,12 @@ private fun DrawerContent(
         label = { Text("Models") },
         selected = false,
         onClick = onOpenModels,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+    )
+    NavigationDrawerItem(
+        label = { Text("Files") },
+        selected = false,
+        onClick = onOpenFiles,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
     )
     NavigationDrawerItem(
