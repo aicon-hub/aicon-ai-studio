@@ -27,8 +27,9 @@ class ModelsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun load(info: ModelInfo) {
         val file = ModelManager.installedFile(info) ?: return
+        val mmproj = ModelManager.mmprojFile(info)?.absolutePath
         viewModelScope.launch {
-            EngineHolder.loadModel(getApplication(), file.absolutePath, info.templateAsset)
+            EngineHolder.loadModel(getApplication(), file.absolutePath, info.templateAsset, mmproj)
         }
     }
 
