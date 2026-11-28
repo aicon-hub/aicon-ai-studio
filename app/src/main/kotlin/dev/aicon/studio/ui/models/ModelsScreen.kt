@@ -24,15 +24,21 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,14 +46,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.aicon.studio.model.ModelCatalog
+import dev.aicon.studio.model.ModelCategory
 import dev.aicon.studio.model.ModelInfo
 import dev.aicon.studio.model.ModelManager
+import dev.aicon.studio.model.Readiness
 import java.io.File
 import java.io.FileOutputStream
 
 /**
- * The model manager: download, verify, load, delete, or import a GGUF from
- * storage. Downloads start only from a tap here.
+ * The model manager, grouped by category tabs. READY entries download and
+ * verify here; NEEDS_RUNTIME and NOT_YET entries explain themselves and
+ * offer nothing to tap. Downloads start only from a tap here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +68,12 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
 
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    val categories = remember {
+        ModelCategory.entries.filter { ModelCatalog.byCategory(it).isNotEmpty() }
+    }
+    var tabIndex by rememberSaveable { mutableIntStateOf(0) }
+    val selectedCategory = categories.getOrElse(tabIndex) { categories.first() }
 
     // SAF gives us a content URI; copy into app storage so the engine sees a real file.
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -94,31 +109,66 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(ModelCatalog.models, key = { it.id }) { info ->
-                ModelCard(info, downloads[info.id], loadedPath, loading, vm)
-            }
-            item {
-                OutlinedButton(
-                    onClick = { importPicker.launch(arrayOf("*/*")) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Import a GGUF from storage")
+            ScrollableTabRow(selectedTabIndex = tabIndex, edgePadding = 12.dp) {
+                categories.forEachIndexed { index, category ->
+                    Tab(
+                        selected = tabIndex == index,
+                        onClick = { tabIndex = index },
+                        text = { Text(category.label) },
+                    )
                 }
             }
-            item {
-                Text(
-                    "Downloads start only when you tap. Chat never uses the network.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(ModelCatalog.byCategory(selectedCategory), key = { it.id }) { info ->
+                    ModelCard(info, downloads[info.id], loadedPath, loading, vm)
+                }
+                if (selectedCategory == ModelCategory.CHAT) {
+                    item {
+                        OutlinedButton(
+                            onClick = { importPicker.launch(arrayOf("*/*")) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Import a GGUF from storage")
+                        }
+                    }
+                    item {
+                        Text(
+                            "Downloads start only when you tap. Chat never uses the network.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ReadinessBadge(readiness: Readiness) {
+    val (bg, fg) = when (readiness) {
+        Readiness.READY ->
+            MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+        Readiness.NEEDS_RUNTIME ->
+            MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+        Readiness.NOT_YET ->
+            MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(color = bg, shape = MaterialTheme.shapes.small) {
+        Text(
+            readiness.label,
+            color = fg,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
     }
 }
 
@@ -138,13 +188,35 @@ private fun ModelCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(info.title, style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    info.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                ReadinessBadge(info.readiness)
+            }
             Text(info.summary, style = MaterialTheme.typography.bodySmall)
+            val ram = info.ramMb?.let {
+                if (it >= 1000) "  ·  RAM: about %.1f GB".format(it / 1000f)
+                else "  ·  RAM: about $it MB"
+            } ?: ""
+            val download = if (info.mmproj != null) {
+                "Size: ${formatSize(info.sizeBytes + info.mmproj.sizeBytes)} in 2 files"
+            } else {
+                "Size: ${formatSize(info.sizeBytes)}"
+            }
             Text(
-                "Size: ${formatSize(info.sizeBytes)}  ·  License: ${info.license}",
+                "$download$ram  ·  License: ${info.license}",
                 style = MaterialTheme.typography.bodySmall,
             )
             when {
+                !info.downloadable -> {
+                    Text(
+                        "Not downloadable in this build.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 state?.status == ModelManager.Status.DOWNLOADING -> {
                     LinearProgressIndicator(
                         progress = { state.progress },
