@@ -1,15 +1,21 @@
 package dev.aicon.studio.ui.chat
 
+import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,16 +46,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.aicon.studio.R
+import java.io.File
+import java.io.FileOutputStream
 
 private const val MAX_ATTACH_CHARS = 8000
 
 /**
- * The chat screen. Original AiCoN AI Studio design: iris accents, rounded
- * bubbles, sessions in the drawer, model management on the Models screen.
+ * The chat screen. Original AiCoN AI Studio design: AiCoN orange accents,
+ * rounded bubbles, sessions in the drawer, model management on the Models
+ * screen. With a vision model loaded, one photo can ride along per message.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +78,8 @@ fun ChatScreen(
     val error by vm.error.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val pendingAttachment by vm.pendingAttachment.collectAsStateWithLifecycle()
+    val pendingImage by vm.pendingImage.collectAsStateWithLifecycle()
+    val visionReady by vm.visionReady.collectAsStateWithLifecycle()
     val exportRequest by vm.exportRequest.collectAsStateWithLifecycle()
     val agentMode by vm.agentMode.collectAsStateWithLifecycle()
     val approval by vm.approval.collectAsStateWithLifecycle()
@@ -88,6 +105,22 @@ fun ChatScreen(
                     String(buf, 0, off)
                 }
                 if (!text.isNullOrEmpty()) vm.setAttachment(name, text)
+            }
+        }
+    }
+
+    // Photo pick: same explicit-pick rule. The image is copied into app
+    // storage so the engine reads a real file path.
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            runCatching {
+                val dir = File(context.filesDir, "chat-images").apply { mkdirs() }
+                val dest = File(dir, "photo-${System.currentTimeMillis()}")
+                context.contentResolver.openInputStream(uri).use { input ->
+                    requireNotNull(input) { "Could not open the picked photo" }
+                    FileOutputStream(dest).use { output -> input.copyTo(output) }
+                }
+                vm.setPendingImage(dest.absolutePath)
             }
         }
     }
@@ -118,6 +151,8 @@ fun ChatScreen(
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
+    val darkHeader = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -126,7 +161,20 @@ fun ChatScreen(
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
-                title = { Text("AiCoN AI Studio") },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(
+                                if (darkHeader) R.drawable.ic_aicon_lockup_light
+                                else R.drawable.ic_aicon_lockup_dark,
+                            ),
+                            contentDescription = "AiCoN",
+                            modifier = Modifier.height(24.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("AI Studio", style = MaterialTheme.typography.titleMedium)
+                    }
+                },
                 actions = {
                     TextButton(onClick = { vm.setAgentMode(!agentMode) }) {
                         Text(
@@ -207,6 +255,16 @@ fun ChatScreen(
                     modifier = Modifier.padding(horizontal = 12.dp),
                 )
             }
+            pendingImage?.let {
+                AssistChip(
+                    onClick = { vm.clearPendingImage() },
+                    label = { Text("Photo attached") },
+                    trailingIcon = {
+                        Icon(Icons.Default.Close, contentDescription = "Remove photo")
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -216,6 +274,11 @@ fun ChatScreen(
             ) {
                 IconButton(onClick = { attachPicker.launch(arrayOf("text/*")) }) {
                     Icon(Icons.Default.Add, contentDescription = "Attach a file")
+                }
+                if (visionReady) {
+                    TextButton(onClick = { imagePicker.launch("image/*") }) {
+                        Text("Photo")
+                    }
                 }
                 OutlinedTextField(
                     value = draft,
@@ -259,6 +322,23 @@ private fun Bubble(msg: ChatMessage, onSave: (() -> Unit)?) {
                 shape = shape,
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    msg.imagePath?.let { path ->
+                        val bitmap = remember(path) {
+                            BitmapFactory.decodeFile(path)?.asImageBitmap()
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "Attached photo",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .heightIn(max = 180.dp)
+                                    .fillMaxWidth(0.7f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .padding(bottom = 6.dp),
+                            )
+                        }
+                    }
                     msg.attachmentName?.let {
                         Text(
                             text = "Attached: $it",
