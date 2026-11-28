@@ -13,6 +13,7 @@ import dev.aicon.studio.chat.ChatStore
 import dev.aicon.studio.chat.StoredMessage
 import dev.aicon.studio.engine.ChatTurn
 import dev.aicon.studio.engine.EngineException
+import dev.aicon.studio.model.ModelStats
 import dev.aicon.studio.engine.Role
 import dev.aicon.studio.engine.agent.ToolCallParser
 import kotlinx.coroutines.CompletableDeferred
@@ -255,6 +256,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _messages.update { list ->
                     list.map { if (it.id == replyId) it.copy(streaming = false, speedText = caption) else it }
                 }
+                EngineHolder.loadedModelPath.value
+                    ?.let { Regex("/models/([^/]+)/").find(it)?.groupValues?.get(1) }
+                    ?.let { modelId ->
+                        ModelStats.record(
+                            getApplication(),
+                            modelId,
+                            stats.decodeTokPerSec,
+                            stats.generatedTokens,
+                        )
+                    }
                 persist()
             } catch (e: EngineException) {
                 _error.value = e.message
