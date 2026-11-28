@@ -76,6 +76,17 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { PhoneCheck.load(context) }
 
+    val models = remember(selectedCategory, PhoneCheck.result) {
+        val base = ModelCatalog.byCategory(selectedCategory)
+        if (PhoneCheck.result == null) {
+            base
+        } else {
+            base.sortedWith(
+                compareBy({ PhoneCheck.fitRank(it.ramMb) }, { it.ramMb ?: Int.MAX_VALUE }),
+            )
+        }
+    }
+
     val categories = remember {
         ModelCategory.entries.filter { ModelCatalog.byCategory(it).isNotEmpty() }
     }
@@ -139,16 +150,6 @@ fun ModelsScreen(vm: ModelsViewModel = viewModel(), onBack: () -> Unit) {
                     PhoneCheckCard(
                         onRun = { scope.launch { PhoneCheck.run(context) } },
                     )
-                }
-                val models = remember(selectedCategory, PhoneCheck.result) {
-                    val base = ModelCatalog.byCategory(selectedCategory)
-                    if (PhoneCheck.result == null) {
-                        base
-                    } else {
-                        base.sortedWith(
-                            compareBy({ PhoneCheck.fitRank(it.ramMb) }, { it.ramMb ?: Int.MAX_VALUE }),
-                        )
-                    }
                 }
                 items(models, key = { it.id }) { info ->
                     ModelCard(info, downloads[info.id], loadedPath, loading, vm)
